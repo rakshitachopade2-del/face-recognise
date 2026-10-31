@@ -1,0 +1,14 @@
+{
+  "version": "sface-operator-calibration-required",
+  "provider": "sface",
+  "state": "uncalibrated",
+  "acceptance": 1.0,
+  "margin": 2.0,
+  "consistency": 1.0,
+  "enrollment_count": 1,
+  "detector_score": 0.8,
+  "detector_max_side": 1600,
+  "min_face_px": 40,
+  "min_blur": 0,
+  "note": "Fail-closed placeholders. Operator must choose and document exploratory operating point; no recognition threshold has been calibrated."
+}

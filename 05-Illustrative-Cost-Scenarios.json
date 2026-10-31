@@ -1,0 +1,85 @@
+{
+  "status": "ILLUSTRATIVE ARITHMETIC ONLY; NOT MEASURED; NOT A MUMBAI QUOTE",
+  "rate_source": "https://aws.amazon.com/rekognition/pricing/",
+  "rate_context": "Published examples; liveness example explicitly US East. Reverify target region.",
+  "FX_context": "90 and 100 INR/USD are hypothetical sensitivity inputs, not current FX.",
+  "excluded": [
+    "tax",
+    "ordinary media",
+    "shared infrastructure",
+    "retries",
+    "tiling"
+  ],
+  "reference": {
+    "inputs": {
+      "photos": 5000,
+      "faces": 20000,
+      "guests": 300,
+      "references_per_guest": 3,
+      "months": 12
+    },
+    "group1_calls": {
+      "completed_album_A": 5900,
+      "incremental_B": 26200
+    },
+    "illustrative_USD": {
+      "A_recognition": "5.900",
+      "B_recognition": "26.200",
+      "liveness_one_attempt": "4.500",
+      "gallery_retention": "2.40000",
+      "B_all_vector_retention": "2.54400",
+      "A_partial_total": "12.80000",
+      "B_partial_total": "33.24400",
+      "ten_weddings_A_recognition_plus_liveness": "104.000",
+      "ten_weddings_B_recognition_plus_liveness": "307.000"
+    },
+    "hypothetical_INR_sensitivity": {
+      "90": {
+        "A_partial": "1152.00000",
+        "B_partial": "2991.96000"
+      },
+      "100": {
+        "A_partial": "1280.00000",
+        "B_partial": "3324.40000"
+      }
+    },
+    "repeated_A_searches_72_batches": 64800,
+    "float32_512d_vector_MiB": 39.0625
+  },
+  "large": {
+    "inputs": {
+      "photos": 15000,
+      "faces": 60000,
+      "guests": 1000,
+      "references_per_guest": 3,
+      "months": 12
+    },
+    "group1_calls": {
+      "completed_album_A": 18000,
+      "incremental_B": 79000
+    },
+    "illustrative_USD": {
+      "A_recognition": "18.000",
+      "B_recognition": "79.000",
+      "liveness_one_attempt": "15.000",
+      "gallery_retention": "7.20000",
+      "B_all_vector_retention": "7.68000",
+      "A_partial_total": "40.20000",
+      "B_partial_total": "101.68000",
+      "ten_weddings_A_recognition_plus_liveness": "330.000",
+      "ten_weddings_B_recognition_plus_liveness": "940.000"
+    },
+    "hypothetical_INR_sensitivity": {
+      "90": {
+        "A_partial": "3618.00000",
+        "B_partial": "9151.20000"
+      },
+      "100": {
+        "A_partial": "4020.00000",
+        "B_partial": "10168.00000"
+      }
+    },
+    "repeated_A_searches_72_batches": 216000,
+    "float32_512d_vector_MiB": 117.1875
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "version": "synthetic-policy-v1", "provider": "synthetic", "state": "uncalibrated",
+  "acceptance": 0.99, "margin": 0.1, "consistency": 0.99, "enrollment_count": 1,
+  "detector_score": 0.8, "detector_max_side": 1600, "min_face_px": 20, "min_blur": 0,
+  "note": "SYNTHETIC colored rectangles only. These constants test branching, not face recognition. Never transfer to a real model."
+}

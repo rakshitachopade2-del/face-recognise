@@ -1,0 +1,143 @@
+{
+  "date": "2026-10-31",
+  "synthetic_only": true,
+  "real_model_checks": "NOT RUN: no permitted artifacts, independent reference outputs or authorized photographs",
+  "backend": {
+    "tests": 39,
+    "failures": 0,
+    "errors": 0,
+    "elapsed_seconds": 2.256
+  },
+  "browser": {
+    "startTime": "2026-10-31T10:40:00.075Z",
+    "duration": 15963.545,
+    "expected": 3,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  },
+  "populated_workflow": {
+    "synthetic_only": true,
+    "recognition_accuracy": "NOT MEASURED",
+    "status": "passed",
+    "checks": {
+      "late_enrollment": {
+        "passed": true,
+        "detection_jobs_before": 3,
+        "detection_jobs_after": 3
+      },
+      "group_photo": {
+        "passed": true,
+        "distinct_participant_galleries": 2
+      },
+      "expected_initial_results": {
+        "red": 2,
+        "green": 1,
+        "unknown_deliveries": 0
+      },
+      "duplicate_import": {
+        "passed": true,
+        "additional_jobs": 0,
+        "additional_photos": 0
+      },
+      "late_photo": {
+        "passed": true,
+        "red_gallery": 3,
+        "green_gallery": 1
+      },
+      "not_me": {
+        "passed": true,
+        "worker_restarted": true,
+        "browser_reloaded": true,
+        "retried_match_job_completed": true,
+        "red_gallery": 2,
+        "unaffected_green_gallery": 1
+      },
+      "event_isolation": {
+        "passed": true,
+        "events": 2,
+        "same_bytes_have_distinct_event_assets": true,
+        "cross_gallery_http": 403,
+        "cross_media_http": 403,
+        "wrong_event_asset_http": 404
+      },
+      "withdrawal": {
+        "passed": true,
+        "queued_photo_completed_after_revocation": true,
+        "stale_session_gallery_http": 401,
+        "stale_session_media_http": 401,
+        "new_preview_http": 403,
+        "deleted_templates": true,
+        "withdrawn_participant_releases": 0,
+        "active_green_gallery": 2
+      },
+      "other_event_after_withdrawal": {
+        "passed": true,
+        "gallery_count": 1
+      }
+    },
+    "uncaught_browser_errors": 0
+  },
+  "provider_startup_gates": {
+    "auraface": {
+      "startup": "blocked_as_expected",
+      "reason": "model_disabled_missing_approval_or_manifest"
+    },
+    "sface": {
+      "startup": "blocked_as_expected",
+      "reason": "model_disabled_missing_approval_or_manifest"
+    }
+  },
+  "hardware": {
+    "platform": "macOS-27.0-arm64-arm-64bit",
+    "machine": "arm64",
+    "python": "3.12.16",
+    "cpu": "Apple M4 Pro",
+    "memory_bytes": "25769803776"
+  },
+  "dependencies": {
+    "fastapi": "0.162.0",
+    "numpy": "2.5.4",
+    "opencv-python-headless": "4.14.0.94",
+    "onnxruntime": "1.31.1",
+    "pillow": "12.3.0",
+    "pillow-heif": "1.8.1"
+  },
+  "synthetic_measurements": {
+    "counts": {
+      "photos": 2,
+      "faces": 3,
+      "enrollments": 2,
+      "released_associations": 2,
+      "rejections": 0
+    },
+    "jobs": 10,
+    "retries": 0,
+    "completed_jobs": 10,
+    "recorded_attempt_elapsed_seconds": 0.08104454099884606,
+    "exercise_wall_seconds": 0.28812708300029044
+  },
+  "configuration": {
+    "version": "synthetic-policy-v1",
+    "provider": "synthetic",
+    "state": "uncalibrated",
+    "acceptance": 0.99,
+    "margin": 0.1,
+    "consistency": 0.99,
+    "enrollment_count": 1,
+    "detector_score": 0.8,
+    "detector_max_side": 1600,
+    "min_face_px": 20,
+    "min_blur": 0.0,
+    "note": "SYNTHETIC colored rectangles only. These constants test branching, not face recognition. Never transfer to a real model."
+  },
+  "provider_namespace": "SYNTHETIC-rectangles-v1:exif-srgb-v2:pillow-12.3.0:heif-1.8.1",
+  "artifact_sha256": {
+    "var/test-results.xml": "fe6e05cd4dd2a6376bc0f41144bba90bbefd61cd684e3ce54c2a6f8f93b46ed4",
+    "var/browser-results.json": "71024959eccb8af21f83e90bd8f7cfe542647fd2111485444751f540dd117b04",
+    "var/populated-browser-outcomes.json": "71bf02a0857b9d35190df4b3d465397a09df38b5173add48c38d5e7ecd9c2dd9",
+    "var/verification-synthetic/runs/synthetic-latest.json": "bb627a5d2c54a73ba66264533e96acbaf614f2c5dcfd26f9170626a9b2e4804b",
+    "var/provider-readiness.json": "f183caef60b37415371f53562f0ee3c050863973e2c84485e31a380053c3f588"
+  },
+  "accuracy_and_cost": "NOT MEASURED; synthetic fixture assertions are not recognition evidence"
+}
