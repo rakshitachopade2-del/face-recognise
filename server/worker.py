@@ -63,6 +63,9 @@ class Worker:
         observations = self.s.provider.analyze(rgb)
         # Publication is one short transaction. An expired owner cannot leave even one face behind.
         with self.s.db.connect(write=True) as db:
+            current_job = db.execute('SELECT status FROM jobs WHERE id=?', (job['id'],)).fetchone()
+            if current_job and current_job['status'] == 'superseded':
+                return
             self.assert_lease(db, job)
             event = event_access(db, job["event_id"], self.s.config_id)
             for ordinal, face in enumerate(observations):
@@ -76,7 +79,7 @@ class Worker:
     def compute_matches(self, job):
         with self.s.db.connect() as db:
             event = event_access(db, job["event_id"], self.s.config_id)
-            enrollments = eligible(db, job["event_id"])
+            enrollments = eligible(db, job["event_id"], policy_id=self.s.op.enrollment_policy)
             for enrollment in enrollments:
                 enrollment["vector"] = np.frombuffer(enrollment["vector"], dtype=np.float32)
             faces = db.execute("SELECT * FROM faces WHERE event_id=? AND photo_id=? AND namespace=?",
@@ -88,13 +91,16 @@ class Worker:
     def publish_matches(self, job, snapshot):
         revision, decisions = snapshot
         with self.s.db.connect(write=True) as db:
+            current_job = db.execute("SELECT status FROM jobs WHERE id=?", (job["id"],)).fetchone()
+            if current_job and current_job["status"] == "superseded":
+                return
             self.assert_lease(db, job)
             event = event_access(db, job["event_id"], self.s.config_id)
             if event["revision"] != revision:
                 # A newer generation gets a new idempotency key; old decisions are never published.
                 self.s.queue(db, job["event_id"], job["photo_id"], "match", event["revision"])
                 return
-            current = {e["participant_id"]: e for e in eligible(db, job["event_id"])}
+            current = {e["participant_id"]: e for e in eligible(db, job["event_id"], policy_id=self.s.op.enrollment_policy)}
             db.execute("DELETE FROM released_associations WHERE event_id=? AND photo_id=?", (job["event_id"], job["photo_id"]))
             db.execute("DELETE FROM proposed_matches WHERE event_id=? AND photo_id=?", (job["event_id"], job["photo_id"]))
             for face_id, decision in decisions:
@@ -111,7 +117,7 @@ class Worker:
                            (evidence, job["event_id"], job["photo_id"], face_id, decision.candidate,
                             decision.generation, self.s.config_id, decision.score, decision.margin,
                             "accepted" if accepted else "abstained", reason))
-                if accepted:
+                if accepted and self.s.op.can_release:
                     db.execute("INSERT OR IGNORE INTO released_associations VALUES (?,?,?,?,?,?,?,?)",
                                (job["event_id"], decision.candidate, job["photo_id"], decision.generation,
                                 evidence, self.s.config_id, "automatic", time.time()))

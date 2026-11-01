@@ -10,5 +10,7 @@
   "detector_max_side": 1600,
   "min_face_px": 40,
   "min_blur": 0,
-  "note": "Fail-closed placeholders. Operator must choose and document exploratory operating point; no recognition threshold has been calibrated."
+  "note": "Fail-closed placeholders. Operator must choose and document exploratory operating point; no recognition threshold has been calibrated.",
+  "release_enabled": false,
+  "freeze_id": null
 }

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,6 +25,19 @@ class OperatingPoint(BaseModel):
     min_face_px: int = Field(ge=1)
     min_blur: float = Field(ge=0)
     note: str
+    release_enabled: StrictBool = False
+    freeze_id: str | None = None
+
+    @property
+    def enrollment_policy(self):
+        return digest_json({'count': self.enrollment_count, 'consistency': self.consistency,
+                            'aggregation': 'normalized-mean-v1'})
+
+    @property
+    def can_release(self):
+        return self.provider == 'synthetic' or (
+            self.release_enabled and self.state in {'provisional', 'validated'}
+            and self.freeze_id is not None and len(self.freeze_id) == 64)
 
     @property
     def fingerprint(self):

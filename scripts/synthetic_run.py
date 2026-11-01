@@ -27,7 +27,8 @@ def main():
         s.enroll(event, person, [fixture([color])] * s.op.enrollment_count)
         people.append(person)
     result = evaluate(s, event, {"dataset_version": "synthetic-rectangles-v1", "split_version": "synthetic-debug-v1",
-        "split_memberships": [], "enrolled": [{"wedding_id": event, "person_id": p} for p in people],
+        "protocol": "synthetic", "event_id": event, "canonical_photo_ids": [group, unknown],
+        "person_mapping": {p:p for p in people}, "photo_mapping": {p:p for p in (group,unknown)}, "assets": [], "enrolled": [{"wedding_id": event, "person_id": p} for p in people],
         "labels": [{"wedding_id": event, "person_id": p, "canonical_photo_id": photo, "present": photo == group,
                     "recognisable": photo == group, "annotation_status": "adjudicated"}
                    for p in people for photo in (group, unknown)]})

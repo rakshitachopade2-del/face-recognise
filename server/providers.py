@@ -12,11 +12,13 @@ import numpy as np
 import onnxruntime as ort
 
 from server.config import digest_json
+from server.identity import pipeline_identity
 from server.media import PREPARATION_VERSION, safe_path
+from server.parity import validate_receipt
 
 MAGIC = np.array([[70, 65, 67], [69, 80, 79], [67, 83, 89], [78, 84, 72]], dtype=np.uint8)
 REFERENCE = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366],
-                      [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float64)
+                      [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
 
 
 class ProviderError(ValueError):
@@ -51,7 +53,8 @@ class SyntheticProvider:
 
     def __init__(self, op):
         self.op = op
-        self.namespace = "SYNTHETIC-rectangles-v1:" + PREPARATION_VERSION
+        self.namespace = "SYNTHETIC-rectangles-v2:" + digest_json({
+            'preparation': PREPARATION_VERSION, 'min_face_px': op.min_face_px, 'pipeline': pipeline_identity()})
 
     def analyze(self, rgb):
         if rgb.shape[1] < 4 or not np.array_equal(rgb[0, :4], MAGIC):
@@ -73,12 +76,12 @@ class SyntheticProvider:
 
 def align(rgb, landmarks):
     """Least-squares non-reflecting similarity transform, five landmarks to 112x112."""
-    source = np.asarray(landmarks, dtype=np.float64)
+    source = np.asarray(landmarks, dtype=np.float32)
     if source.shape != (5, 2) or not np.isfinite(source).all():
         raise ProviderError("invalid_landmarks")
     src_mean, dst_mean = source.mean(0), REFERENCE.mean(0)
     src, dst = source - src_mean, REFERENCE - dst_mean
-    variance = (src ** 2).sum() / 5
+    variance = src.var(axis=0).sum()
     if variance < 1e-8:
         raise ProviderError("degenerate_landmarks")
     u, singular, vt = np.linalg.svd(dst.T @ src / 5)
@@ -86,8 +89,8 @@ def align(rgb, landmarks):
     if np.linalg.det(u @ vt) < 0:
         sign[-1] = -1
     rotation = u @ np.diag(sign) @ vt
-    scale = (singular * sign).sum() / variance
-    transform = np.column_stack((scale * rotation, dst_mean - scale * rotation @ src_mean))
+    scale = (1.0 / variance) * (singular @ sign)
+    transform = np.column_stack((scale * rotation, dst_mean - scale * (rotation @ src_mean)))
     return cv2.warpAffine(rgb, transform, (112, 112), flags=cv2.INTER_LINEAR, borderValue=0)
 
 
@@ -128,16 +131,15 @@ class RealProvider:
         self._inference_lock = threading.Lock()
         self.model_identity = digest_json({"detector": self.detector_entry, "recognizer": self.entry,
                                           "preparation": PREPARATION_VERSION,
-                                          "opencv": cv2.__version__, "ort": ort.__version__})
+                                          'pipeline': pipeline_identity()})
         self.namespace = op.provider + ":" + self.model_identity + ":" + digest_json({
             k: getattr(op, k) for k in ("detector_score", "detector_max_side", "min_face_px", "min_blur")})
         self.parity_path = settings.data_dir / "parity" / (self.model_identity + ".json")
         if require_parity:
-            if not self.parity_path.is_file():
-                raise ProviderError("model_disabled_preprocessing_parity_not_run")
-            receipt = json.loads(self.parity_path.read_text())
-            if receipt.get("model_identity") != self.model_identity or receipt.get("status") != "passed":
-                raise ProviderError("model_disabled_preprocessing_parity_failed")
+            try:
+                validate_receipt(settings.data_dir, self.parity_path, self.model_identity)
+            except (ValueError, OSError, KeyError) as exc:
+                raise ProviderError('model_disabled_' + str(exc)) from exc
         self.detector = cv2.FaceDetectorYN.create(str(detector_path), "", (320, 320),
                                                 op.detector_score, 0.3, 5000)
         options = ort.SessionOptions()
@@ -168,13 +170,15 @@ class RealProvider:
     def _analyze(self, rgb):
         height, width = rgb.shape[:2]
         scale = min(1, self.op.detector_max_side / max(height, width))
-        resized = cv2.resize(rgb[:, :, ::-1], (round(width * scale), round(height * scale)))
+        target_width, target_height = max(1, round(width * scale)), max(1, round(height * scale))
+        resized = cv2.resize(rgb[:, :, ::-1], (target_width, target_height))
+        scales = np.array([target_width / width, target_height / height])
         self.detector.setInputSize((resized.shape[1], resized.shape[0]))
         _, rows = self.detector.detect(resized)
         result = []
         for row in [] if rows is None else rows:
-            bbox = row[:4].astype(float) / scale
-            landmarks = row[4:14].reshape(5, 2).astype(float) / scale
+            bbox = row[:4].astype(float) / np.tile(scales, 2)
+            landmarks = row[4:14].reshape(5, 2).astype(float) / scales
             quality = {"score": float(row[14]), "detector_size": list(resized.shape[:2][::-1]),
                        "landmarks": landmarks.tolist(), "blur": None}
             status, vector = "usable", None

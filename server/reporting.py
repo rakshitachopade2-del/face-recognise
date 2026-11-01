@@ -33,6 +33,7 @@ def report(service, event_id=None):
         "dependencies": {p: importlib.metadata.version(p) for p in
                          ("fastapi", "numpy", "opencv-python-headless", "onnxruntime", "pillow", "pillow-heif")},
         "measured": {"counts": counts, "jobs": len(jobs), "retries": sum(max(0, j["attempts"] - 1) for j in jobs),
+                     "superseded_jobs": sum(j["status"] == "superseded" for j in jobs),
                      "completed_jobs": sum(j["status"] == "complete" for j in jobs),
                      "recorded_attempt_elapsed_seconds": sum(j["elapsed"] or 0 for j in jobs)},
         "not_measured": ["real recognition precision/recall", "detector recall", "fairness", "liveness",

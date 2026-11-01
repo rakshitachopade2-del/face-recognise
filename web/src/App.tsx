@@ -66,7 +66,7 @@ export default function App() {
     return () => { alive = false; clearInterval(timer); };
   }, [event, preview, tab]);
   const active = status.participants.filter(p => p.active);
-  const done = status.jobs.filter(j => j.status === 'complete').length;
+  const done = status.jobs.filter(j => ['complete', 'superseded'].includes(j.status)).length;
 
   return <div className={s.app}>
     <aside className={s.sidebar}>

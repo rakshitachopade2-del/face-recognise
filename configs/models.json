@@ -12,12 +12,18 @@
     "permission_basis": null,
     "production_use_status": "blocked-unresolved-C1",
     "contract": {
-      "input_shape": "dynamic full-frame",
+      "input_shape": [
+        1,
+        3,
+        640,
+        640
+      ],
       "channel_order": "BGR",
       "normalization": "OpenCV FaceDetectorYN",
       "alignment": "none",
       "output_dimension": null,
-      "contract_status": "candidate contract; verify exact graph and reference parity before enabling"
+      "contract_status": "candidate contract; verify exact graph and reference parity before enabling",
+      "runtime_shape": "OpenCV 4.x variable input; test separately"
     }
   },
   "auraface": {

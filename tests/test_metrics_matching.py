@@ -10,7 +10,7 @@ from server.reporting import real_benchmark_summary
 
 def row(person, photo, present=True, recognisable=True, **extra):
     return dict(wedding_id='event', person_id=person, canonical_photo_id=photo,
-                present=present, recognisable=recognisable, annotation_status='adjudicated', **extra)
+                present=present, recognisable=recognisable if present else False, annotation_status='adjudicated', **extra)
 
 
 def roster(*people):
@@ -53,7 +53,7 @@ def test_recognisable_denominator_unknowns_wrong_evidence_and_bursts():
     assert result['micro']['recall'] == .5
     assert result['micro']['recognisable_recall'] == 1
     assert result['unresolved_deliveries'] == 1
-    assert result['maximum_wrong_release_burst'] == 1
+    assert result['maximum_wrong_release_burst'] is None
     assert result['evidence']['wrong'] == 1
 
 

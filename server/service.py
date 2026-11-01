@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import time
 import uuid
@@ -33,7 +34,7 @@ def event_access(db, event_id, config_id=None):
     return event
 
 
-def eligible(db, event_id, participant_id=None):
+def eligible(db, event_id, participant_id=None, policy_id=None):
     sql = """SELECT e.*, p.label FROM enrollments e
              JOIN participants p ON p.id=e.participant_id AND p.event_id=e.event_id
              JOIN consents c ON c.id=e.consent_id AND c.event_id=e.event_id AND c.participant_id=p.id
@@ -43,6 +44,9 @@ def eligible(db, event_id, participant_id=None):
     if participant_id:
         sql += " AND e.participant_id=?"
         args.append(participant_id)
+    if policy_id:
+        sql += " AND e.policy_id=?"
+        args.append(policy_id)
     return [dict(row) for row in db.execute(sql, args)]
 
 
@@ -59,18 +63,25 @@ class Service:
                        (self.config_id, self.namespace, self.op.model_dump_json(), time.time()))
             db.execute("UPDATE events SET active_config=? WHERE active_config=''", (self.config_id,))
 
-    def create_event(self, name, authorization, days=30):
+    def create_event(self, name, authorization, days=30, authorization_kind='participant_consent'):
+        if authorization_kind not in {'participant_consent', 'published_dataset_study_use_basis'}:
+            raise DomainError('unsupported_authorization_kind')
         if not authorization.strip() or not name.strip() or not 0 < days <= 30:
             raise DomainError("name_adult_dataset_authorization_and_1_to_30_days_required")
         event_id = uid()
         now = time.time()
         with self.db.connect(write=True) as db:
-            db.execute("INSERT INTO events (id,name,authorization,purpose,expires,created,active_config) VALUES (?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO events (id,name,authorization,purpose,expires,created,active_config,authorization_kind) VALUES (?,?,?,?,?,?,?,?)",
                        (event_id, name.strip(), authorization.strip(), "adult-consented-evaluation",
-                        now + days * 86400, now, self.config_id))
+                        now + days * 86400, now, self.config_id, authorization_kind))
         return event_id
 
     def queue(self, db, event_id, photo_id, kind, revision=0):
+        if kind == 'match':
+            db.execute("""UPDATE jobs SET status='superseded',lease_owner=NULL,error='newer_roster_revision'
+                          WHERE event_id=? AND photo_id=? AND kind='match' AND config_id=?
+                          AND revision<? AND status IN ('pending','retryable_failure','running')""",
+                       (event_id, photo_id, self.config_id, revision))
         key = f"{kind}:{photo_id}:{self.namespace}:{self.config_id}:{revision}"
         db.execute("""INSERT OR IGNORE INTO jobs
                    (id,event_id,photo_id,kind,idempotency_key,namespace,config_id,revision,available,created)
@@ -132,17 +143,19 @@ class Service:
                        (uid(), event_id, batch_id, ordinal, None, "terminal_failure", reason, time.time()))
         return {"ordinal": ordinal, "state": "terminal_failure", "reason": reason}
 
-    def consent(self, event_id, label, basis, days=30):
+    def consent(self, event_id, label, basis, days=30, basis_kind='participant_consent'):
         if not label.strip() or not basis.strip() or not 0 < days <= 30:
             raise DomainError("participant_label_active_consent_and_1_to_30_days_required")
         participant, consent = uid(), uid()
         now = time.time()
         with self.db.connect(write=True) as db:
             event = event_access(db, event_id, self.config_id)
+            if basis_kind != event['authorization_kind']:
+                raise DomainError('authorization_basis_kind_mismatch')
             db.execute("INSERT INTO participants (id,event_id,label) VALUES (?,?,?)", (participant, event_id, label))
-            db.execute("INSERT INTO consents VALUES (?,?,?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO consents (id,event_id,participant_id,purpose,basis,active,generation,expires,created,basis_kind) VALUES (?,?,?,?,?,?,?,?,?,?)",
                        (consent, event_id, participant, "photo-retrieval", basis, 1, 1,
-                        min(event["expires"], now + days * 86400), now))
+                        min(event["expires"], now + days * 86400), now, basis_kind))
         return {"participant_id": participant, "consent_id": consent, "generation": 1}
 
     def enroll(self, event_id, participant_id, contents):
@@ -183,12 +196,13 @@ class Service:
             generation += 1
             db.execute("UPDATE participants SET generation=? WHERE id=?", (generation, participant_id))
             db.execute("UPDATE consents SET generation=? WHERE id=?", (generation, consent_id))
-            db.execute("""INSERT INTO enrollments VALUES (?,?,?,?,?,?,?,?,?)
+            db.execute("""INSERT INTO enrollments (id,event_id,participant_id,consent_id,generation,namespace,vector,reference_count,created,policy_id,reference_hashes) VALUES (?,?,?,?,?,?,?,?,?,?,?)
                        ON CONFLICT(event_id,participant_id) DO UPDATE SET id=excluded.id,
                        consent_id=excluded.consent_id,generation=excluded.generation,namespace=excluded.namespace,
-                       vector=excluded.vector,reference_count=excluded.reference_count,created=excluded.created""",
+                       vector=excluded.vector,reference_count=excluded.reference_count,created=excluded.created,policy_id=excluded.policy_id,reference_hashes=excluded.reference_hashes""",
                        (uid(), event_id, participant_id, consent_id, generation, self.namespace,
-                        template.tobytes(), len(vectors), time.time()))
+                        template.tobytes(), len(vectors), time.time(), self.op.enrollment_policy,
+                        json.dumps([hashlib.sha256(c).hexdigest() for c in contents])))
             self.rematch_event(db, event_id)
         return {"state": "enrolled", "generation": generation, "reference_count": len(vectors)}
 
@@ -197,6 +211,9 @@ class Service:
         revision = db.execute("SELECT revision FROM events WHERE id=?", (event_id,)).fetchone()[0]
         # Existing releases must be reconsidered when the distinct-identity margin changes.
         db.execute("DELETE FROM released_associations WHERE event_id=?", (event_id,))
+        event = db.execute('SELECT authorized,expires FROM events WHERE id=?', (event_id,)).fetchone()
+        if not event['authorized'] or event['expires'] <= time.time():
+            return
         for photo in db.execute("SELECT id FROM photos WHERE event_id=? AND state='complete' AND namespace=?",
                                 (event_id, self.namespace)).fetchall():
             self.queue(db, event_id, photo["id"], "match", revision)
@@ -237,12 +254,14 @@ class Service:
             db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def session(self, role, event_id=None, participant_id=None):
+        if role == 'guest':
+            self.require_release()
         token = secrets.token_urlsafe(32)
         generation = None
         with self.db.connect(write=True) as db:
             if role == "guest":
                 event_access(db, event_id, self.config_id)
-                people = eligible(db, event_id, participant_id)
+                people = eligible(db, event_id, participant_id, self.op.enrollment_policy)
                 if not people or people[0]["namespace"] != self.namespace:
                     raise DomainError("active_compatible_enrollment_required", 403)
                 generation = people[0]["generation"]
@@ -252,6 +271,8 @@ class Service:
         return token
 
     def authorize(self, token, role, event_id=None, participant_id=None):
+        if role == 'guest':
+            self.require_release()
         with self.db.connect() as db:
             session = db.execute("SELECT * FROM sessions WHERE token_hash=? AND expires>?",
                                  (hashlib.sha256(token.encode()).hexdigest(), time.time())).fetchone()
@@ -260,16 +281,17 @@ class Service:
             if event_id:
                 event_access(db, event_id, self.config_id)
             if role == "guest":
-                people = eligible(db, event_id, participant_id)
+                people = eligible(db, event_id, participant_id, self.op.enrollment_policy)
                 if (session["event_id"] != event_id or session["participant_id"] != participant_id
                         or not people or session["generation"] != people[0]["generation"]
                         or people[0]["namespace"] != self.namespace):
                     raise DomainError("gallery_authorization_revoked_or_wrong_event", 403)
 
     def gallery(self, event_id, participant_id):
+        self.require_release()
         with self.db.connect() as db:
             event_access(db, event_id, self.config_id)
-            people = eligible(db, event_id, participant_id)
+            people = eligible(db, event_id, participant_id, self.op.enrollment_policy)
             if not people or people[0]["namespace"] != self.namespace:
                 raise DomainError("gallery_authorization_revoked", 403)
             return [dict(row) for row in db.execute("""SELECT p.id,p.width,p.height,r.outcome
@@ -290,14 +312,13 @@ class Service:
             db.execute("UPDATE jobs SET status='pending',attempts=0,available=?,error=NULL WHERE id=?",
                        (time.time(), job_id))
 
+    def require_release(self):
+        if not self.op.can_release:
+            raise DomainError('guest_release_disabled', 403)
+
     def maintenance(self):
         """Enforce shorter permissions / 30-day POC expiry; retain original photos separately."""
         now = time.time()
-        with self.db.connect() as db:
-            people = db.execute("""SELECT p.event_id,p.id FROM participants p JOIN consents c ON c.participant_id=p.id
-                                 WHERE p.active=1 AND c.active=1 AND c.expires<=?""", (now,)).fetchall()
-        for person in people:
-            self.withdraw(person["event_id"], person["id"])
         with self.db.connect(write=True) as db:
             for event in db.execute("SELECT id FROM events WHERE authorized=1 AND expires<=?", (now,)).fetchall():
                 event_id = event["id"]
@@ -310,6 +331,11 @@ class Service:
                 db.execute("UPDATE photos SET state='expired' WHERE event_id=?", (event_id,))
                 db.execute("INSERT INTO deletions VALUES (?,?,?,?,?,?,?)", (uid(), event_id, None, "event-face-data",
                            now, None, "vectors and identity links purged; media purge pending"))
+        with self.db.connect() as db:
+            people = db.execute("""SELECT p.event_id,p.id FROM participants p JOIN consents c ON c.participant_id=p.id
+                                 WHERE p.active=1 AND c.active=1 AND c.expires<=?""", (now,)).fetchall()
+        for person in people:
+            self.withdraw(person['event_id'], person['id'])
         # Event tombstones fence access before deleting files. Repeated runs resume interrupted unlinks.
         with self.db.connect() as db:
             expired = db.execute("""SELECT p.event_id,p.storage_key,p.derivative_key FROM photos p

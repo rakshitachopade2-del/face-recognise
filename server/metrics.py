@@ -3,6 +3,8 @@ from collections import Counter
 
 import numpy as np
 
+from server.evaluation import Label
+
 
 def link(row):
     return row["wedding_id"], row["person_id"], row["canonical_photo_id"]
@@ -13,14 +15,17 @@ def ratio(a, b):
 
 
 def score(labels, delivered, enrolled, previews=(), evidence=(), rejections=()):
+    labels = [Label.model_validate(row).model_dump() for row in labels]
     known, truth, recognisable = set(), set(), set()
     seen = {}
     for row in labels:
         key = link(row)
         if key in seen and seen[key] != row:
             raise ValueError("conflicting_duplicate_label")
+        if key in seen:
+            raise ValueError("duplicate_label")
         seen[key] = row
-        if row["annotation_status"] != "adjudicated" or row["present"] is None:
+        if row["annotation_status"] not in {"adjudicated", "source_verified"} or row["present"] is None:
             continue
         known.add(key)
         if row["present"]:
@@ -41,7 +46,7 @@ def score(labels, delivered, enrolled, previews=(), evidence=(), rejections=()):
         guests.append({"wedding_id": person[0], "person_id": person[1], "true_links": len(y),
                        "delivered_links": len(d), "correct": tp, "wrong": len(d - y),
                        "precision": None if any(k[:2] == person for k in raw - known) else ratio(tp, len(d)),
-                       "recall": ratio(tp, len(y)),
+                       "recall": None if any(k[:2] == person for k in set(seen) - known) else ratio(tp, len(y)),
                        "empty": not any(k[:2] == person for k in raw)})
     def aggregate(field):
         values = [p[field] for p in guests if p[field] is not None]
@@ -49,7 +54,7 @@ def score(labels, delivered, enrolled, previews=(), evidence=(), rejections=()):
                 "median": float(np.median(values)) if values else None,
                 "p10": float(np.quantile(values, .1)) if values else None,
                 "worst": min(values) if values else None, "defined_guests": len(values)}
-    burst = Counter((d["wedding_id"], d.get("release_batch", "unspecified"))
+    burst = Counter((d["wedding_id"], d.get("release_batch"))
                     for d in {link(d): d for d in delivered}.values() if link(d) in wrong)
     preview_set = {link(d) for d in previews}
     corrected = raw - {link(d) for d in rejections}
@@ -59,14 +64,15 @@ def score(labels, delivered, enrolled, previews=(), evidence=(), rejections=()):
                   "correct": len(correct), "wrong": len(wrong),
                   "precision": None if raw - known else ratio(len(correct), len(raw)),
                   "adjudicated_only_precision": ratio(len(correct), len(adjudicated)),
-                  "recall": ratio(len(correct), len(truth)), "recognisable_support": len(recognisable),
-                  "recognisable_recall": ratio(len(raw & recognisable), len(recognisable))},
+                  "recall": None if set(seen) - known else ratio(len(correct), len(truth)),
+                  "known_truth_only_recall": ratio(len(correct), len(truth)), "missed": len(truth - raw), "recognisable_support": len(recognisable),
+                  "recognisable_recall": None if any(r["present"] is True and r["recognisable"] is None for r in labels) else ratio(len(raw & recognisable), len(recognisable))},
         "unresolved_deliveries": len(raw - known), "unresolved_label_rows": sum(
-            r["annotation_status"] != "adjudicated" or r["present"] is None for r in labels),
+            r["annotation_status"] not in {"adjudicated", "source_verified"} or r["present"] is None for r in labels),
         "macro_precision": aggregate("precision"), "macro_recall": aggregate("recall"), "per_guest": guests,
         "empty_gallery_coverage": ratio(sum(g["empty"] for g in guests), len(guests)),
         "affected_guests": len({k[:2] for k in wrong}), "events_with_wrong_links": len({k[0] for k in wrong}),
-        "maximum_wrong_release_burst": max(burst.values(), default=0),
+        "maximum_wrong_release_burst": None if any(not d.get("release_batch") for d in delivered) else max(burst.values(), default=0),
         "previews": {"exposures": len(previews), "unique_links": len(preview_set),
                      "wrong_known_links": len((preview_set & known) - truth), "unresolved": len(preview_set - known)},
         "evidence": {"correct": sum(e.get("correct") is True for e in evidence),

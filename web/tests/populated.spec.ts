@@ -30,7 +30,7 @@ async function state(page: Page, event: string): Promise<State> {
   return response.json();
 }
 async function complete(page: Page, event: string) {
-  await expect.poll(async () => (await state(page, event)).jobs.every(j => j.status === 'complete'),
+  await expect.poll(async () => (await state(page, event)).jobs.every(j => ['complete', 'superseded'].includes(j.status)),
     {timeout: 25000}).toBe(true);
 }
 async function createEvent(page: Page, suffix: string) {

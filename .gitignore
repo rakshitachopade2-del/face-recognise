@@ -38,3 +38,7 @@ node_modules/
 *.p12
 *.pfx
 credentials*.json
+
+# User-supplied private study package
+Def Ref/
+*.zip
