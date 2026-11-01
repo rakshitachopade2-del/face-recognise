@@ -1,5 +1,7 @@
 # C0 readiness report — 1 November 2026
 
+> Publication follow-up: the user subsequently authorized pushing `poc/c0-studio-study` for GitHub review. References below to local-only/unpushed work describe the measurement-time snapshot. See [AI_REVIEW_HANDOFF.md](AI_REVIEW_HANDOFF.md). No merge or deployment is authorized.
+
 C0 engineering and numerical gates passed; the supplied bounded studio experiment also completed. The default app remains synthetic and shipped real-model registries/releases remain disabled. See [STUDIO_STUDY_REPORT.md](STUDIO_STUDY_REPORT.md) for separate real-photo results.
 
 Local branch: `poc/c0-studio-study`. Executed source/test commit: `888e79db463d977e48c9bb2e8a14d5d5ae16795f`, based on inspected `b895af6a9e22101a5e9b5ab6e1c3aad32e007847`. Every server/script/runtime-lock file in the freeze matches this source commit. Documentation is committed separately after measurement. No push, merge, deployment, paid service or reset of prior app data was performed.

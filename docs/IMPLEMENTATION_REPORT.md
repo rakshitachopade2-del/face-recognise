@@ -1,5 +1,7 @@
 # Current milestone: C0 and supplied studio study (1 November 2026)
 
+> Publication follow-up: the user subsequently authorized pushing `poc/c0-studio-study` for GitHub review. References below to local-only/unpushed work describe the measurement-time snapshot. See [AI_REVIEW_HANDOFF.md](AI_REVIEW_HANDOFF.md). No merge or deployment is authorized.
+
 C0 source/test commit: `888e79db463d977e48c9bb2e8a14d5d5ae16795f`, local branch `poc/c0-studio-study`. No push, merge, deployment or paid services. The original A/B report below is historical; its “no weights/no photographs/no parity” statements no longer describe the separate C0 study.
 
 - **63 backend tests**, **3 Chromium tests**, Ruff, Python compilation and TypeScript/Vite build passed.

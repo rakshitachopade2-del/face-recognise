@@ -4,7 +4,7 @@ Phases A/B plus C0 and the supplied local studio experiment, implemented in this
 
 The default provider accepts visibly synthetic colored rectangles only. The separate C0 experiment verified the permitted YuNet/AuraFace artifacts, passed independent non-person parity, and completed the supplied studio calibration/probe. Each cohort had 6 correct links, 0 wrong and 0 missed across 12 gallery photos; calibration released no guest links. These small, correlated studio results do not establish real-event accuracy. Shipped real configs remain disabled; SFace, production costs, scale, fairness and liveness remain unmeasured.
 
-Repository: [rakshitachopade2-del/face-recognise](https://github.com/rakshitachopade2-del/face-recognise) · Published baseline: [`poc/phases-a-b`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/phases-a-b). Current C0 branch: `poc/c0-studio-study`, local only; no push or deployment.
+Repository: [rakshitachopade2-del/face-recognise](https://github.com/rakshitachopade2-del/face-recognise) · Published baseline: [`poc/phases-a-b`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/phases-a-b). C0 review branch: [`poc/c0-studio-study`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/c0-studio-study). The user subsequently authorized publishing this branch for review; no merge or deployment.
 
 Verification on 1 November 2026: **63 backend tests and 3 Chromium browser tests passed**, including a populated two-event workflow. TypeScript checks (including browser test code), Vite build, Ruff and Python compilation passed. The populated checks exercised group-photo sharing, duplicate imports, late enrollment/photos, rejection after retry and worker/browser restart, withdrawal with queued work, and cross-event denial. These are synthetic pipeline results, not recognition accuracy.
 
@@ -12,10 +12,10 @@ Verification on 1 November 2026: **63 backend tests and 3 Chromium browser tests
 
 Verified on Apple Silicon macOS with Node 24.13.0, npm 11.6.2 and Python 3.12.16. A system Python 3.9+ is sufficient to bootstrap uv; uv installs the pinned Python 3.12 runtime. Internet is needed for open-source dependencies and the optional browser-test download. Default app startup never downloads models. The explicitly invoked study setup downloads only the two permitted pinned artifacts and reference code. HEIC support comes from the pinned pillow-heif wheel; unsupported HEIC variants fail per file. Other operating systems have not been verified.
 
-For the published A/B baseline, clone as below. C0 exists only in this local checkout until separately authorized publication; do not expect the remote clone to contain the C0 runner yet. Install dependencies from the desired checkout:
+Clone the C0 review branch and install its locked dependencies. For AI review, start with [AI_REVIEW_HANDOFF.md](docs/AI_REVIEW_HANDOFF.md). Private experiment inputs and runtime evidence are not included in the repository:
 
 ```sh
-git clone --branch poc/phases-a-b https://github.com/rakshitachopade2-del/face-recognise.git
+git clone --branch poc/c0-studio-study https://github.com/rakshitachopade2-del/face-recognise.git
 cd face-recognise
 python3 -m venv .bootstrap
 .bootstrap/bin/python -m pip install uv==0.13.6

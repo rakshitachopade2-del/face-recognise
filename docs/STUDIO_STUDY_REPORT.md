@@ -1,5 +1,7 @@
 # Supplied studio study — actual results, 1 November 2026
 
+> Publication follow-up: the user subsequently authorized pushing `poc/c0-studio-study` for GitHub review. References below to local-only/unpushed work describe the measurement-time snapshot. See [AI_REVIEW_HANDOFF.md](AI_REVIEW_HANDOFF.md). No merge or deployment is authorized.
+
 **Completed once with a frozen provisional policy.** Both calibration and probe contain all 12 selected gallery photographs and all 36 presence labels. Calibration selected six correct candidate links with zero wrong links; it published zero guest links. The probe actually published six correct links, zero wrong links and zero misses. This is a small correlated studio retrieval experiment, not real-event validation.
 
 Protocol: `studio_identity_split_exploratory`; `sealed_test=false`. Branch: `poc/c0-studio-study` (local only). Executed source commit: `888e79db463d977e48c9bb2e8a14d5d5ae16795f`. Baseline: `b895af6a9e22101a5e9b5ab6e1c3aad32e007847`. Documentation follows in a separate local commit; nothing was pushed.
