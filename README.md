@@ -1,18 +1,18 @@
 # Frame — local face retrieval POC
 
-Phases A and B of the supplied handoff, implemented in this workspace. **Operator-controlled identity simulator: no real authentication, verified camera capture or liveness. Do not expose it publicly.**
+Phases A/B plus C0 and the supplied local studio experiment, implemented in this workspace. **Operator-controlled identity simulator: no real authentication, verified camera capture or liveness. Do not expose it publicly.**
 
-The default provider accepts generated, visibly synthetic colored rectangles only. It does not recognize people. No model weights or authorized photographs were supplied. Real YuNet + AuraFace and YuNet + SFace adapters are disabled pending exact artifact approval, hash checks and reference preprocessing parity. Real recognition accuracy, cost, throughput and fairness are **NOT MEASURED**.
+The default provider accepts visibly synthetic colored rectangles only. The separate C0 experiment verified the permitted YuNet/AuraFace artifacts, passed independent non-person parity, and completed the supplied studio calibration/probe. Each cohort had 6 correct links, 0 wrong and 0 missed across 12 gallery photos; calibration released no guest links. These small, correlated studio results do not establish real-event accuracy. Shipped real configs remain disabled; SFace, production costs, scale, fairness and liveness remain unmeasured.
 
-Repository: [rakshitachopade2-del/face-recognise](https://github.com/rakshitachopade2-del/face-recognise) · Milestone branch: [`poc/phases-a-b`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/phases-a-b).
+Repository: [rakshitachopade2-del/face-recognise](https://github.com/rakshitachopade2-del/face-recognise) · Published baseline: [`poc/phases-a-b`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/phases-a-b). Current C0 branch: `poc/c0-studio-study`, local only; no push or deployment.
 
-Verification on 31 October 2026: **39 backend tests and 3 Chromium browser tests passed**, including a populated two-event workflow. TypeScript checks (including browser test code), Vite build, Ruff and Python compilation passed. The populated checks exercised group-photo sharing, duplicate imports, late enrollment/photos, rejection after retry and worker/browser restart, withdrawal with queued work, and cross-event denial. These are synthetic pipeline results, not recognition accuracy.
+Verification on 1 November 2026: **63 backend tests and 3 Chromium browser tests passed**, including a populated two-event workflow. TypeScript checks (including browser test code), Vite build, Ruff and Python compilation passed. The populated checks exercised group-photo sharing, duplicate imports, late enrollment/photos, rejection after retry and worker/browser restart, withdrawal with queued work, and cross-event denial. These are synthetic pipeline results, not recognition accuracy.
 
 ## Supported setup
 
-Verified on Apple Silicon macOS with Node 24.13.0, npm 11.6.2 and Python 3.12.16. A system Python 3.9+ is sufficient to bootstrap uv; uv installs the pinned Python 3.12 runtime. Internet is needed for open-source dependencies and the optional browser-test download. No model is downloaded automatically. HEIC support comes from the pinned pillow-heif wheel; unsupported HEIC variants fail per file. Other operating systems have not been verified.
+Verified on Apple Silicon macOS with Node 24.13.0, npm 11.6.2 and Python 3.12.16. A system Python 3.9+ is sufficient to bootstrap uv; uv installs the pinned Python 3.12 runtime. Internet is needed for open-source dependencies and the optional browser-test download. Default app startup never downloads models. The explicitly invoked study setup downloads only the two permitted pinned artifacts and reference code. HEIC support comes from the pinned pillow-heif wheel; unsupported HEIC variants fail per file. Other operating systems have not been verified.
 
-Clone the milestone, then install the locked dependencies:
+For the published A/B baseline, clone as below. C0 exists only in this local checkout until separately authorized publication; do not expect the remote clone to contain the C0 runner yet. Install dependencies from the desired checkout:
 
 ```sh
 git clone --branch poc/phases-a-b https://github.com/rakshitachopade2-del/face-recognise.git
@@ -81,6 +81,27 @@ npm run test:browser
 
 Tests use generated fixtures and isolated temporary/private databases. Browser artifacts go to `var/browser-results.json`, `var/populated-browser-outcomes.json` and `var/screenshots/`; the browser's synthetic database is `var/browser-tests/`. Synthetic run measurements go to `var/runs/synthetic-latest.json`. Use `FACE_DATA_DIR=var/verification-synthetic .venv/bin/python -m scripts.synthetic_run` to keep a verification run separate from your demo data. The populated browser test injects a failed match-job state only into its isolated synthetic database, retries it through the UI and restarts the real worker process; it does not add a fault-injection API to the app.
 
+## Completed C0 studio study
+
+Read [C0 readiness](docs/C0_READINESS_REPORT.md) and [actual studio results](docs/STUDIO_STUDY_REPORT.md). The kit is under `var/assistant-inputs/face-poc-kit/`; all weights, pictures, labels, mappings and detailed evidence remain ignored under `var/c0-studio/`.
+
+```sh
+.bootstrap/bin/uv sync --locked --group reference
+.venv/bin/python -m scripts.studio_study preflight
+.venv/bin/python -m scripts.studio_study all
+```
+
+On a fresh run, `all` automates permitted downloads, parity, import/enrollment, label mapping, calibration, freezing, the probe and reports. On this completed run it returns saved results without repeating probe inference. An interrupted stage is not silently replayed. Optional angle references were not used. Do not delete the saved freeze or retune from probe errors.
+
+To inspect the completed probe locally:
+
+```sh
+FACE_DATA_DIR=var/c0-studio FACE_MODELS=var/c0-studio/registry.json \
+  FACE_CONFIG=var/c0-studio/provisional-config.json .venv/bin/python -m scripts.dev
+```
+
+Open **http://127.0.0.1:5177** and select the probe event. Preserve its raw results; do not activate its provisional policy on the calibration event or correct the saved experiment. Stop any existing launcher first. The UI is still an operator simulator, with no production identity verification.
+
 ## Real-model setup and evaluation
 
 See [docs/MODELS.md](docs/MODELS.md) for approval, exact artifacts, preprocessing and parity requirements; [docs/EVALUATION.md](docs/EVALUATION.md) for labels and metric semantics; and [docs/IMPLEMENTATION_REPORT.md](docs/IMPLEMENTATION_REPORT.md) for verified outcomes and remaining work. Never use synthetic constants as a real-model threshold.
@@ -91,7 +112,7 @@ Use `FACE_DATA_DIR` for another private data directory, `FACE_CONFIG` for an ope
 FACE_CONFIG=configs/your-approved-operating-point.json .venv/bin/python -m scripts.reindex --event EVENT_ID
 ```
 
-Start all processes with that same `FACE_CONFIG`. Threshold-only changes reuse embeddings. Decoder, detector, quality, alignment or model changes use a new namespace. Incompatible enrollment templates require new references and enrollment; they cannot be converted. Old workers cannot publish after configuration activation.
+Start all processes with that same `FACE_CONFIG`. Threshold-only changes reuse embeddings. Reference count/consistency changes invalidate enrollment templates and guest access while retaining reusable photo vectors. Decoder, detector, quality, alignment or model changes use a new namespace. Incompatible enrollment templates require new references and enrollment; they cannot be converted. Old workers cannot publish after configuration activation.
 
 ## Privacy and retention
 

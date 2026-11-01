@@ -1,0 +1,281 @@
+{
+  "$defs": {
+    "Asset": {
+      "additionalProperties": false,
+      "properties": {
+        "asset_id": {
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "person_id": {
+          "minLength": 1,
+          "title": "Person Id",
+          "type": "string"
+        },
+        "capture_group_id": {
+          "minLength": 1,
+          "title": "Capture Group Id",
+          "type": "string"
+        },
+        "wedding_id": {
+          "minLength": 1,
+          "title": "Wedding Id",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "development",
+            "calibration",
+            "test",
+            "probe"
+          ],
+          "title": "Split",
+          "type": "string"
+        },
+        "split_version": {
+          "minLength": 1,
+          "title": "Split Version",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "reference",
+            "gallery"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "canonical_photo_id": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Photo Id"
+        }
+      },
+      "required": [
+        "asset_id",
+        "path",
+        "sha256",
+        "person_id",
+        "capture_group_id",
+        "wedding_id",
+        "split",
+        "split_version",
+        "kind"
+      ],
+      "title": "Asset",
+      "type": "object"
+    },
+    "Label": {
+      "additionalProperties": false,
+      "properties": {
+        "wedding_id": {
+          "minLength": 1,
+          "title": "Wedding Id",
+          "type": "string"
+        },
+        "person_id": {
+          "minLength": 1,
+          "title": "Person Id",
+          "type": "string"
+        },
+        "canonical_photo_id": {
+          "minLength": 1,
+          "title": "Canonical Photo Id",
+          "type": "string"
+        },
+        "present": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Present"
+        },
+        "recognisable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recognisable"
+        },
+        "annotation_status": {
+          "enum": [
+            "adjudicated",
+            "source_verified",
+            "unknown"
+          ],
+          "title": "Annotation Status",
+          "type": "string"
+        },
+        "label_basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label Basis"
+        }
+      },
+      "required": [
+        "wedding_id",
+        "person_id",
+        "canonical_photo_id",
+        "present",
+        "recognisable",
+        "annotation_status"
+      ],
+      "title": "Label",
+      "type": "object"
+    },
+    "Person": {
+      "additionalProperties": false,
+      "properties": {
+        "wedding_id": {
+          "minLength": 1,
+          "title": "Wedding Id",
+          "type": "string"
+        },
+        "person_id": {
+          "minLength": 1,
+          "title": "Person Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "wedding_id",
+        "person_id"
+      ],
+      "title": "Person",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "dataset_version": {
+      "minLength": 1,
+      "title": "Dataset Version",
+      "type": "string"
+    },
+    "split_version": {
+      "minLength": 1,
+      "title": "Split Version",
+      "type": "string"
+    },
+    "protocol": {
+      "enum": [
+        "synthetic",
+        "capture_holdout_exploratory",
+        "event_identity_holdout",
+        "studio_identity_split_exploratory"
+      ],
+      "title": "Protocol",
+      "type": "string"
+    },
+    "event_id": {
+      "minLength": 1,
+      "title": "Event Id",
+      "type": "string"
+    },
+    "canonical_photo_ids": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Canonical Photo Ids",
+      "type": "array"
+    },
+    "enrolled": {
+      "items": {
+        "$ref": "#/$defs/Person"
+      },
+      "title": "Enrolled",
+      "type": "array"
+    },
+    "labels": {
+      "items": {
+        "$ref": "#/$defs/Label"
+      },
+      "title": "Labels",
+      "type": "array"
+    },
+    "person_mapping": {
+      "additionalProperties": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Person Mapping",
+      "type": "object"
+    },
+    "photo_mapping": {
+      "additionalProperties": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "propertyNames": {
+        "minLength": 1
+      },
+      "title": "Photo Mapping",
+      "type": "object"
+    },
+    "assets": {
+      "items": {
+        "$ref": "#/$defs/Asset"
+      },
+      "title": "Assets",
+      "type": "array"
+    },
+    "sealed_test": {
+      "const": false,
+      "default": false,
+      "title": "Sealed Test",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "dataset_version",
+    "split_version",
+    "protocol",
+    "event_id",
+    "canonical_photo_ids",
+    "enrolled",
+    "labels",
+    "person_mapping",
+    "photo_mapping",
+    "assets"
+  ],
+  "title": "Evaluation",
+  "type": "object"
+}

@@ -1,44 +1,64 @@
-# Evaluation workflow and boundaries
+# Evaluation contract and commands
 
-`server.matching` is the direct baseline shared by the worker and evaluation CLI. It compares one aggregated template per distinct event participant, enforces acceptance and runner-up separation, and abstains. No clustering, rescue, template self-training or probability interpretation is implemented. A face has at most one assigned identity; a photograph can belong to multiple guests. Releases deduplicate `(event, participant, photo)`.
+`server.evaluation.Evaluation` is the authoritative typed run contract. Its generated schema is [evaluation.schema.json](evaluation.schema.json). The supplied studio runner builds, saves and verifies this contract automatically; no new photographs or manual labels are needed for that completed study.
 
-The application records aggregate snapshots separately from evaluation metrics. An app report without independent labels never manufactures accuracy. Synthetic reports have an explicit synthetic flag and cannot enter `real_benchmark_summary`.
+A run declares dataset/split versions, protocol, actual app event ID, exact canonical-photo universe, full enrolled roster (including absent participants), source-to-app person/photo mappings, input assets with paths/hashes/capture groups/splits, and one truth row for every photo × enrolled person. Duplicate or missing rows, dangling mappings, wrong event/version, empty real input inventories, changed source bytes, reference/gallery hash or capture reuse, and inconsistent app photo/reference hashes fail validation. Enrollment failures remain roster members; processing failures remain in the photo denominator. Counts are calculated after processing. Predictions outside the declared universe are excluded explicitly and returned for audit.
 
-## Private dataset manifests
+JSON `present` and `recognisable` accept only actual `true`, `false`, or `null`, never strings or numeric booleans. IDs must be nonempty. `adjudicated` and explicitly supported `source_verified` truth require a known boolean; `unknown` requires null truth. Recognisable=true requires present=true. Source-verified rows require provenance and the studio protocol; they are not silently relabeled human-adjudicated.
 
-Keep the five CSV manifests specified by document 02 under `var/dataset/`. Required columns are enforced by `scripts/validate_dataset.py`: `media.csv`, `face_annotations.csv`, `person_photo_labels.csv`, `enrollments.csv` and `split_memberships.csv`. Use JSON text for `bbox_xywh`, `true/false/unknown` for truth values, and `development/calibration/test` split names. Identity pseudonyms must be consistent across events to detect cross-event identity leakage. This validator checks declared identifiers, not visual duplicate detection or legal permission.
-
-```sh
-.venv/bin/python -m scripts.validate_dataset var/dataset
-```
-
-The scoring CLI accepts a private JSON export using app event, participant and canonical photo IDs. Export/convert your independently adjudicated labels to this shape; there is no automatic image-labeling tool. The required CSV files remain the source of dataset provenance and detection truth.
-
-```json
-{
-  "dataset_version": "authorized-debug-v1",
-  "split_version": "debug-split-v1",
-  "split_memberships": [{"wedding_id":"EVENT_ID", "person_id":"PERSON_ID", "capture_group_id":"capture-1", "split":"development", "split_version":"debug-split-v1"}],
-  "enrolled": [{"wedding_id":"EVENT_ID", "person_id":"PERSON_ID"}],
-  "labels": [{"wedding_id":"EVENT_ID", "person_id":"PERSON_ID", "canonical_photo_id":"PHOTO_ID", "present":true, "recognisable":true, "annotation_status":"adjudicated"}],
-  "evidence": [{"correct":true}]
-}
-```
-
-Label all selected frames for each evaluated enrolled identity, including absent participants and images containing authorized unenrolled people. An unlisted pair is not an implicit negative. Mark unknown truth as `present: null`; recognisability must be defined before prediction review. Include missed detections in the person-photo denominator. `evidence` contains separately adjudicated correctness of supporting face observations; omit it when unavailable, rather than implying the evidence face was correct.
+CSV conversion is explicit, using the same Label model. Fields are `wedding_id,person_id,canonical_photo_id,present,recognisable,annotation_status`, plus optional `label_basis`. Boolean CSV values are exactly `true`, `false`, `unknown`, `null`, or empty for null:
 
 ```sh
-.venv/bin/python -m scripts.evaluate --event EVENT_ID --labels var/dataset/evaluation.json
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+from server.evaluation import labels_from_csv
+from server.media import atomic_write
+root = Path('var/dataset')
+atomic_write(root, 'labels.json', json.dumps(labels_from_csv(root / 'labels.csv'), indent=2).encode())
+PY
 ```
 
-This exploratory command queues a current-configuration rematch through the same worker code and writes `var/runs/evaluation-<run>.json`. It refuses a dataset with cross-event labels, split identifier leakage, unfinished/failed current work, or an event containing Not me corrections; raw automatic evaluation must be frozen before human correction. Use separate private snapshots for assisted outcomes. This CLI is not a sealed-test registry: immutable split freezing, event-aware confidence intervals and sealed-release decision automation are future evaluation work.
+This yields label rows, not a complete evaluation manifest. The older five-CSV `scripts.validate_dataset` utility is an inventory helper, not the authoritative experiment preflight. It cannot establish run completeness, permission or recognition accuracy.
 
-## Implemented metric semantics
+## Protocols
 
-- Unique person-photo links define truth and deliveries. Duplicated detections/deliveries cannot inflate counts. Co-present unknown bystanders do not make a correct group photo an error.
-- Precision is correct delivered links / all delivered links when all deliveries are adjudicated. It is undefined for no deliveries and withheld if any delivery is unresolved; adjudicated-only precision is reported separately. Recall is correct delivered links / all adjudicated true links. No results with true appearances gives zero recall.
-- Recognisable recall uses the predefined recognisable true-link denominator. Micro totals, per-person supports, macro means, median, p10, worst supported guest, empty-gallery coverage, wrong links, affected guests, events and wrong-release burst counts are available.
-- Preview exposures, evidence-face errors and operator-corrected counts remain separate. Rejections do not improve the raw automatic metric retroactively. The live UI exposes no low-confidence candidate previews to guests.
-- Detector recall, open-set evidence-face attribution, condition/subgroup gaps, confidence intervals, full-pipeline miss attribution, real N=300/1,000 quality, scale, billed cost and liveness remain unavailable without the respective measurements. Zero observed synthetic errors is not a release gate.
+- `synthetic`: visibly synthetic pipeline fixtures, never recognition evidence.
+- `capture_holdout_exploratory`: the same global people may recur across splits, but capture groups and file hashes must not.
+- `event_identity_holdout`: events, global identities, capture groups and hashes must be split-disjoint.
+- `studio_identity_split_exploratory`: fixed kit subjects are calibration/probe disjoint; neutral/smiling capture groups differ but sessions do not. Source-verified presence is deliberately supported. Two app events are not two independent real events.
 
-The smallest real experiment is a few authorized full photographs, including a multi-person frame and an authorized unenrolled participant, plus independently captured enrollment references. Then progress toward the document's 200–500-photo / 20–40-adult debug set. Larger held-out events and genuine distinct N=300/1,000 identities are required for those claims; synthetic identities cannot fill the gap.
+The kit preflight validates the complete cross-cohort asset inventory; per-cohort manifests bind actual app IDs. Hash/capture-ID checks cannot prove visual independence or training-data non-overlap. No sealed-test claim is made.
+
+## Supplied study
+
+```sh
+.venv/bin/python -m scripts.studio_study preflight
+.venv/bin/python -m scripts.studio_study all
+# Optional individual stages, in order, using the same private root:
+.venv/bin/python -m scripts.studio_study calibrate
+.venv/bin/python -m scripts.studio_study probe
+.venv/bin/python -m scripts.studio_study controls
+```
+
+Use `--kit PATH --root PATH` for explicitly separate private input/run storage. `all` performs model setup/parity on a fresh run. For individually invoked stages, first run the model/parity commands in [MODELS.md](MODELS.md). Calibration itself is the operator-only diagnostic: all 12 calibration gallery photos and three references, no guest releases. It declares 48 candidates before inference, uses `server.matching.decide`, and chooses zero wrong links, maximum correct links, then higher acceptance and margin. If none is useful, the probe is skipped with releases disabled.
+
+The optimizer reads only calibration labels/vectors. Preflight verifies both kit cohorts; freezing hashes probe bytes without using their content to select policy. The frozen policy, code/model/reference/runtime identities, source/input/label hashes and permission basis are saved before any probe inference. The probe calls actual Service import/enrollment and Worker publication paths once; raw outcomes are saved before any corrections. Started-stage markers prevent silent retries after partial execution. Completed stages return their saved evidence. Keep the run directory intact.
+
+Private artifacts include `preflight.json`, `calibration-procedure.json`, per-cohort mappings/manifests/raw outcomes, all candidate scores/results, `freeze.json`, `provisional-config.json`, `probe-result.json` and `controls-result.json`. The complete private files contain sensitive per-image evidence and stay out of Git. [STUDIO_STUDY_REPORT.md](STUDIO_STUDY_REPORT.md) contains sanitized aggregates.
+
+For a separate generic, fully specified evaluation, use:
+
+```sh
+FACE_DATA_DIR=var/your-run FACE_CONFIG=var/your-run/policy.json \
+  FACE_MODELS=var/your-run/registry.json .venv/bin/python -m scripts.evaluate \
+  --event APP_EVENT_ID --labels var/your-run/evaluation.json --input-root var/your-inputs
+```
+
+That generic command rematches through the worker. Do not use it to silently repeat or retune the completed frozen probe. Corrected events are refused as raw automatic evaluation; preserve pre-correction results instead.
+
+## Metric meanings
+
+The unit is a unique event/person/canonical-photo link. Precision is correct/all delivered links, undefined at no deliveries, and withheld for unresolved deliveries. Recall uses all true links, including missed detections, rejected faces and processing failures. Unknown truth withholds whole-set recall; known-truth-only recall is explicitly separate. Recognisable recall is null when recognisability has not been annotated. Missing release-batch evidence makes maximum wrong-release burst null when deliveries exist; event totals are not substituted.
+
+Absent-C errors and the fraction of the six unknown-only photos receiving any false link are separate study outputs. That photo-level rate is not independent face FMR. No face boxes/evidence identities were supplied, so detector recall and evidence-face correctness remain unmeasured. No population confidence intervals, real-event performance, scale, fairness, liveness, cost or production clearance follows from these small correlated studio results.

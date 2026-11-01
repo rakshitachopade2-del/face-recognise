@@ -1,3 +1,31 @@
+# Current milestone: C0 and supplied studio study (1 November 2026)
+
+C0 source/test commit: `888e79db463d977e48c9bb2e8a14d5d5ae16795f`, local branch `poc/c0-studio-study`. No push, merge, deployment or paid services. The original A/B report below is historical; its “no weights/no photographs/no parity” statements no longer describe the separate C0 study.
+
+- **63 backend tests**, **3 Chromium tests**, Ruff, Python compilation and TypeScript/Vite build passed.
+- Explicit release controls, strict complete evaluation schema, enrollment-policy compatibility, coalesced matching/expiry behavior, geometry/cache corrections and code-bound parity are implemented and tested.
+- Both permitted pinned models were downloaded and byte-hash verified. Eight independent non-person parity cases, seven negative controls and three same-engine detector-wrapper checks passed. Initial parity failures were retained and corrected without relaxing tolerances.
+- Fixed studio calibration and probe each contain all 12 gallery photos and 36 truth rows, with one reference for each of three enrolled adults. Chosen threshold 0.6 / margin 0.3 produced 6 correct, 0 wrong and 0 missed links per cohort. Calibration published nothing; the frozen probe published six links. Unknown-person photos and absent C received no links. No subjects or failures were filtered out.
+- These are correlated, same-session studio results with source-verified presence labels. Real-event accuracy, recognisable/detector recall, fairness, liveness, scale, production rights and cost remain unestablished. No additional inputs are needed for this specific supplied study.
+
+Full evidence, limitations and exact commands: [C0_READINESS_REPORT.md](C0_READINESS_REPORT.md), [STUDIO_STUDY_REPORT.md](STUDIO_STUDY_REPORT.md), [MODELS.md](MODELS.md), [EVALUATION.md](EVALUATION.md).
+
+```sh
+.bootstrap/bin/uv sync --locked --group reference
+npm --prefix web ci
+.venv/bin/python -m scripts.studio_study preflight
+.venv/bin/python -m scripts.studio_study all
+# Local synthetic app:
+.venv/bin/python -m scripts.dev
+# Or inspect the completed real probe (stop the other launcher first):
+FACE_DATA_DIR=var/c0-studio FACE_MODELS=var/c0-studio/registry.json \
+  FACE_CONFIG=var/c0-studio/provisional-config.json .venv/bin/python -m scripts.dev
+```
+
+UI: http://127.0.0.1:5177. Completed study stages return their saved evidence without repeating the probe. The runtime directory is private and ignored. Detailed labels, scores, embeddings, DBs, model binaries and photographs are excluded from Git. The documentation follow-up commit can be identified with `git log -2 --oneline`.
+
+---
+
 # Implementation report — phases A and B
 
 31 October 2026 · Milestone branch: [`poc/phases-a-b`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/phases-a-b) · [Repository](https://github.com/rakshitachopade2-del/face-recognise)
