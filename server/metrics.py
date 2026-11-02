@@ -66,7 +66,7 @@ def score(labels, delivered, enrolled, previews=(), evidence=(), rejections=()):
                   "adjudicated_only_precision": ratio(len(correct), len(adjudicated)),
                   "recall": None if set(seen) - known else ratio(len(correct), len(truth)),
                   "known_truth_only_recall": ratio(len(correct), len(truth)), "missed": len(truth - raw), "recognisable_support": len(recognisable),
-                  "recognisable_recall": None if any(r["present"] is True and r["recognisable"] is None for r in labels) else ratio(len(raw & recognisable), len(recognisable))},
+                  "recognisable_recall": None if any(r["present"] is None or (r["present"] is True and r["recognisable"] is None) for r in labels) else ratio(len(raw & recognisable), len(recognisable))},
         "unresolved_deliveries": len(raw - known), "unresolved_label_rows": sum(
             r["annotation_status"] not in {"adjudicated", "source_verified"} or r["present"] is None for r in labels),
         "macro_precision": aggregate("precision"), "macro_recall": aggregate("recall"), "per_guest": guests,

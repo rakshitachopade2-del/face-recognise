@@ -6,7 +6,7 @@ from pathlib import Path
 from server.config import ROOT, digest_json
 
 CASE_NAMES = ('identity', 'asymmetric', 'grid', 'translation', 'rotation', 'scale', 'combined', 'border')
-PARITY_SCHEMA = 'independent-nonperson-v2'
+PARITY_SCHEMA = 'independent-nonperson-v3'
 
 
 def sha_file(path):
@@ -16,7 +16,8 @@ def sha_file(path):
 
 def pipeline_identity():
     return {'code': {name: sha_file(ROOT / 'server' / name) for name in
-                     ('providers.py', 'media.py', 'identity.py', 'parity.py')},
+                     ('providers.py', 'media.py', 'identity.py', 'parity.py', 'reference_pins.py')},
+            'source_pins': sha_file(ROOT / 'configs/reference-sources.json'),
             'runtime': {name: importlib.metadata.version(name) for name in
                         ('numpy', 'opencv-python-headless', 'onnxruntime', 'pillow', 'pillow-heif')}}
 
@@ -24,5 +25,6 @@ def pipeline_identity():
 def checker_identity():
     return digest_json({'schema': PARITY_SCHEMA,
                         'checker': sha_file(ROOT / 'scripts/check_parity.py'),
+                        'source_pins': sha_file(ROOT / 'configs/reference-sources.json'),
                         'generator': sha_file(ROOT / 'scripts/reference_runner.py'),
-                        'reference_runtime': {p: importlib.metadata.version(p) for p in ('scikit-image', 'onnx')}})
+                        'reference_runtime': {p: importlib.metadata.version(p) for p in ('scikit-image', 'onnx', 'scipy')}})

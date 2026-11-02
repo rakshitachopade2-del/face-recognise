@@ -110,9 +110,7 @@ def create_app(settings=None, service=None):
                 "jobs": [dict(r) for r in db.execute("""SELECT id,photo_id,kind,status,attempts,error,lease_expiry,
                           heartbeat FROM jobs WHERE event_id=? ORDER BY created DESC""", (event_id,))],
                 "imports": [dict(r) for r in db.execute("SELECT ordinal,state,reason FROM imports WHERE event_id=? ORDER BY created DESC LIMIT 100", (event_id,))],
-                "participants": [dict(r) for r in db.execute("""SELECT p.id,p.label,p.active,
-                    EXISTS(SELECT 1 FROM enrollments e WHERE e.participant_id=p.id AND e.namespace=?) AS enrolled
-                    FROM participants p WHERE p.event_id=?""", (s.namespace, event_id))],
+                "participants": s.participant_status(db, event_id),
             }
 
     @app.post("/api/events/{event_id}/jobs/{job_id}/retry")

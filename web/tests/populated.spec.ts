@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const python = path.join(root, '.venv/bin/python');
-const privateDir = path.join(root, 'var/browser-tests');
+const privateDir = path.resolve(root, process.env.FACE_BROWSER_DATA_DIR || 'var/browser-tests');
 const env = {...process.env, FACE_DATA_DIR: privateDir, FACE_CONFIG: path.join(root, 'configs/synthetic.json')};
 let worker: ChildProcess | undefined;
 function startWorker() {
@@ -123,7 +123,7 @@ test('populated two-event lifecycle with shared group, late work, retry/restart 
   await preview(page, a, red, [group, redOnly, lateRed]);
   await preview(page, a, green, [group]);
   checks.late_photo = {passed: true, red_gallery: 3, green_gallery: 1};
-  await page.screenshot({path: path.join(root, 'var/screenshots/populated-group.png'), fullPage: true});
+  await page.screenshot({path: path.join(root, process.env.FACE_BROWSER_RESULTS_DIR || 'var', 'screenshots/populated-group.png'), fullPage: true});
 
   await preview(page, a, red, [group, redOnly, lateRed]);
   await page.locator('article').filter({has: page.locator(`img[src$="/gallery/${group}/media"]`)}).getByRole('button', {name: 'Not me'}).click();
@@ -201,8 +201,50 @@ print(json.dumps(result))
   await preview(page, b, bRed, [bGroup.photo_id]);
   checks.other_event_after_withdrawal = {passed: true, gallery_count: 1};
   expect(errors).toEqual([]);
-  writeFileSync(path.join(root, 'var/populated-browser-outcomes.json'), JSON.stringify({
+  writeFileSync(path.join(root, process.env.FACE_BROWSER_RESULTS_DIR || 'var', 'populated-browser-outcomes.json'), JSON.stringify({
     synthetic_only: true, recognition_accuracy: 'NOT MEASURED', status: 'passed', checks,
     uncaught_browser_errors: errors.length,
   }, null, 2) + '\n');
+});
+
+test('incompatible enrollment shows reason and becomes previewable after re-enrollment', async ({page}) => {
+  // Generated rectangles only, in this browser run's isolated DB. Previous policy used 3 references.
+  const seeded = JSON.parse(execFileSync(python, ['-c', `
+import json
+from pathlib import Path
+from server.config import Settings
+from server.service import Service
+from server.worker import Worker
+from scripts.make_fixtures import fixture
+s = Settings.environment()
+old_config = s.operating_point().model_copy(update={'enrollment_count': 3, 'version': 'browser-previous-policy'})
+path = s.data_dir / 'previous-policy.json'
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(old_config.model_dump_json())
+old = Service(s.model_copy(update={'config_path': path}))
+e = old.create_event('SYNTHETIC C0.1 readiness', 'Generated rectangles only')
+p = old.consent(e, 'SYNTHETIC policy participant', 'Synthetic test consent')['participant_id']
+old.enroll(e, p, [fixture(['red'])] * 3)
+old.import_one(e, fixture(['red'], variant=2), 'synthetic', 0)
+w = Worker(old)
+while w.run_once(): pass
+Service(s).activate_configuration(e)
+print(json.dumps({'event':e,'person':p}))
+`], {cwd: root, env, encoding: 'utf8'})) as {event: string; person: string};
+  await page.goto('/');
+  await expect(page.getByText('SYNTHETIC MODE')).toBeVisible();
+  await page.getByLabel('Current event').selectOption(seeded.event);
+  await page.getByRole('button', {name: '02 Enrollment'}).click();
+  await page.getByLabel('Participant', {exact: true}).selectOption(seeded.person);
+  await expect(page.getByText('Re-enrollment required: reference policy changed.')).toBeVisible();
+  await page.getByRole('button', {name: '03 Guest preview'}).click();
+  await expect(page.getByLabel('Preview as').locator(`option[value="${seeded.person}"]`)).toHaveCount(0);
+  await page.getByRole('button', {name: '02 Enrollment'}).click();
+  await page.getByLabel('Reference images', {exact: true}).setInputFiles(path.join(root, 'var/fixtures/enroll-red.png'));
+  await page.getByRole('button', {name: 'Enroll participant', exact: true}).click();
+  await expect(page.getByRole('status')).toContainText('Enrolled.');
+  await expect(page.getByText('Re-enrollment required: reference policy changed.')).toHaveCount(0);
+  await page.getByRole('button', {name: '03 Guest preview'}).click();
+  await page.getByLabel('Preview as').selectOption(seeded.person);
+  await expect(page.getByAltText('Released photograph')).toHaveCount(1);
 });

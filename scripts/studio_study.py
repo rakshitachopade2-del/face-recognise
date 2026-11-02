@@ -39,7 +39,7 @@ def load(path):
 
 def code_identity():
     paths = list((ROOT / 'server').glob('*.py')) + list((ROOT / 'scripts').glob('*.py'))
-    paths += [ROOT / 'server/schema.sql', ROOT / 'pyproject.toml', ROOT / 'uv.lock']
+    paths += [ROOT / 'server/schema.sql', ROOT / 'pyproject.toml', ROOT / 'uv.lock', ROOT / 'configs/reference-sources.json']
     return {str(p.relative_to(ROOT)): sha_file(p) for p in sorted(paths)}
 
 
@@ -51,6 +51,9 @@ def stage_start(root, stage):
 
 
 def preflight(kit, root):
+    # Includes incomplete `all` invocations. Never refresh historical evidence.
+    if (root / 'freeze.json').exists():
+        raise ValueError('frozen_experiment_preflight_is_read_only_use_a_new_directory')
     result = subprocess.run([sys.executable, str(kit / 'tools/verify_bundle.py')], check=True, capture_output=True, text=True)
     study = load(kit / 'dataset/study.json')
     assets = []
@@ -145,10 +148,11 @@ def extras(metrics, deliveries, mapping, study, cohort):
     absent = {mapping['people'][p] for p in cohort['absent_enrolled_person_ids']}
     return {'metrics': metrics, 'unknown_only_photos': len(unknown_photos), 'unknown_only_false_links': len(wrong_unknown),
             'unknown_only_photos_with_false_release': len({d['canonical_photo_id'] for d in wrong_unknown}),
-            'unknown_only_photo_false_release_rate': len({d['canonical_photo_id'] for d in wrong_unknown}) / len(unknown_photos),
+            'unknown_only_photo_false_release_rate': len({d['canonical_photo_id'] for d in wrong_unknown}) / len(unknown_photos) if unknown_photos else None,
             'absent_C_false_links': sum(d['person_id'] in absent for d in deliveries),
             'gallery_capture_groups': len({a['capture_group_id'] for a in study['assets'] if a['cohort'] == cohort['cohort'] and a['kind'] == 'gallery'}),
-            'enrollments': mapping['enrollments'], 'photo_denominator': 12, 'label_denominator': 36}
+            'enrollments': mapping['enrollments'], 'photo_denominator': len(mapping['photos']),
+            'label_denominator': len(mapping['photos']) * len(mapping['people'])}
 
 
 def calibrate(kit, root, study):
@@ -160,9 +164,12 @@ def calibrate(kit, root, study):
     config = load(ROOT / 'configs/auraface.uncalibrated.json')
     save(root, 'diagnostic-config.json', config)
     s = Service(settings(root, 'diagnostic-config.json'))
+    if s.op.can_release:
+        raise ValueError('calibration_requires_release_disabled')
     e, mapping, manifest, cohort = cohort_run(kit, root, study, 'calibration', s)
     with s.db.connect() as db:
-        assert db.execute('SELECT COUNT(*) FROM released_associations WHERE event_id=?', (e,)).fetchone()[0] == 0
+        if db.execute('SELECT COUNT(*) FROM released_associations WHERE event_id=?', (e,)).fetchone()[0] != 0:
+            raise ValueError('calibration_published_guest_links')
         templates = eligible(db, e, policy_id=s.op.enrollment_policy)
         for t in templates:
             t['vector'] = np.frombuffer(t['vector'], dtype='float32')
@@ -229,6 +236,22 @@ def probe(kit, root, study):
     for c in study['cohorts']:
         if sha_file(kit / c['label_file']) != m['label_file_hashes'][c['cohort']]:
             raise ValueError('frozen_label_bytes_changed')
+    # Verify actual frozen bytes before constructing a provider or running inference.
+    if study != load(kit / 'dataset/study.json') or m['pipeline'] != pipeline_identity():
+        raise ValueError('frozen_study_or_pipeline_changed')
+    selected = {a['asset_id']: a for a in study['assets'] if a['kind'] != 'optional_reference'}
+    if set(selected) != set(m['input_hashes']):
+        raise ValueError('frozen_asset_inventory_changed')
+    for asset_id, a in selected.items():
+        path = (kit / a['path']).resolve()
+        if (not path.is_relative_to(kit.resolve()) or a['sha256'] != m['input_hashes'][asset_id]
+                or sha_file(path) != m['input_hashes'][asset_id]):
+            raise ValueError('frozen_input_bytes_changed')
+    for path, key in ((kit / 'provenance/permission-basis.json', 'permission_basis_sha256'),
+                      (root / 'reference-corpus/manifest.json', 'reference_corpus_sha256'),
+                      (root / 'calibration-result.json', 'calibration_result_sha256')):
+        if sha_file(path) != m[key]:
+            raise ValueError('frozen_evidence_changed')
     stage_start(root, 'probe')  # Refuse automatic retries after partial inference.
     started = time.perf_counter()
     s = Service(settings(root, 'provisional-config.json'))
@@ -271,6 +294,11 @@ def main():
     args = parser.parse_args()
     root, kit = args.root.resolve(), args.kit.resolve()
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    stages = ['calibration', 'probe', 'controls'] if args.stage == 'all' else [
+        'calibration' if args.stage == 'calibrate' else args.stage]
+    if args.stage != 'preflight' and all((root / (s + '-result.json')).exists() for s in stages):
+        print(json.dumps({s: load(root / (s + '-result.json')).get('status', 'recorded') for s in stages}))
+        return  # Historical completed results are read-only, including their preflight evidence.
     study = preflight(kit, root)
     if args.stage == 'preflight':
         print(json.dumps({'status': 'preflight_passed', 'selected_portraits': 30, 'gallery_photos': 24}))

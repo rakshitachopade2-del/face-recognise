@@ -9,10 +9,11 @@ import numpy as np
 import onnx
 
 from server.config import ROOT, Settings
-from server.identity import CASE_NAMES, PARITY_SCHEMA, checker_identity, sha_file
+from server.identity import PARITY_SCHEMA, checker_identity
 from server.media import atomic_write
-from server.parity import validate_case, validate_corpus, validate_receipt
+from server.parity import TOLERANCES, Receipt, validate_case, validate_corpus, validate_payload
 from server.providers import RealProvider, align
+from server.reference_pins import verify_sources
 
 
 def compare(provider, case):
@@ -22,23 +23,29 @@ def compare(provider, case):
     raw = provider.session.run(None, {provider.input_name: tensor})[0].reshape(512)
     embedding = provider.embed(tensor)
     cosine = float(embedding @ case['embedding'])
-    passed = bool(np.allclose(tensor, case['tensor'], atol=1e-4, rtol=1e-5) and cosine >= .99999)
-    return {'passed': passed, 'tensor_max_abs_error': float(np.max(np.abs(tensor - case['tensor']))),
+    scaled_error = float(np.max(np.abs(tensor - case['tensor']) / (1e-4 + 1e-5 * np.abs(case['tensor']))))
+    passed = bool(scaled_error <= 1 and cosine >= .99999)
+    return {'passed': passed, 'tensor_scaled_error': scaled_error, 'tensor_max_abs_error': float(np.max(np.abs(tensor - case['tensor']))),
             'embedding_cosine': cosine, 'pixel_max_abs_error': int(np.abs(crop.astype(int)-case['crop']).max()),
             'pixel_elements_different': int(np.count_nonzero(crop != case['crop'])),
             'app_raw_norm': float(np.linalg.norm(raw)), 'reference_raw_norm': float(np.linalg.norm(case['raw_embedding']))}
 
 
-def main():
-    settings = Settings.environment()
+def run(settings):
     root = settings.data_dir
+    if (root / 'freeze.json').exists():
+        raise ValueError('historical_freeze_present_use_separate_parity_directory')
+    if settings.operating_point().provider != 'auraface':
+        raise ValueError('this_reference_suite_is_auraface_only')
+    pins = verify_sources(root)
     subprocess.run([sys.executable, '-I', str(ROOT / 'scripts/reference_runner.py'), '--root', str(root)], check=True)
     metadata = json.loads((root / 'reference-corpus/reference-metadata.json').read_text())
-    sources = {p.name: {'path': str(p.relative_to(root)), 'sha256': sha_file(p)}
-               for p in (root / 'reference-code').iterdir() if p.is_file()}
-    sources.update({f'detector-{i}': value for i, value in enumerate(metadata['detector_cases'])})
-    manifest = {'schema': PARITY_SCHEMA, 'case_names': list(CASE_NAMES), 'checker_identity': checker_identity(),
-                'cases': metadata['cases'], 'sources': sources, 'scope': 'Deterministic non-person numerical patterns'}
+    sources = {name: {'path': 'reference-code/' + name, 'sha256': pin['sha256']}
+               for name, pin in pins.items()}
+    manifest = {'schema_version': PARITY_SCHEMA, 'provider': 'auraface', 'checker_identity': checker_identity(),
+                'cases': metadata['cases'], 'sources': sources,
+                'detector_cases': {v['case_id']: v for v in metadata['detector_cases']},
+                'scope': 'Deterministic non-person numerical patterns'}
     atomic_write(root, 'reference-corpus/manifest.json', json.dumps(manifest, indent=2).encode())
     corpus_digest = validate_corpus(root, manifest)
     provider = RealProvider(settings, settings.operating_point(), require_parity=False)
@@ -46,7 +53,7 @@ def main():
     for name, entry in manifest['cases'].items():
         with np.load(root / entry['path'], allow_pickle=False) as data:
             cases[name] = {k: data[k] for k in data.files}
-    results = {name: compare(provider, case) for name, case in cases.items()}
+    results = {name: {**manifest['cases'][name], **compare(provider, case)} for name, case in cases.items()}
     controls = {}
     for name in ('channel_swap', 'landmark_swap', 'omitted_normalization', 'broadcastable_tensor', 'nonfinite_embedding'):
         bad = copy.deepcopy(cases['asymmetric'])
@@ -71,37 +78,59 @@ def main():
         controls['missing_case'] = False
     except ValueError:
         controls['missing_case'] = True
-    wrappers = []
+    wrappers = {}
     for entry in metadata['detector_cases']:
         with np.load(root / entry['path'], allow_pickle=False) as data:
             height, width = data['bgr'].shape[:2]
             provider.detector.setInputSize((width, height))
             _, rows = provider.detector.detect(data['bgr'])
             actual = np.empty((0, 5)) if rows is None else rows
-            wrappers.append({'size': [width, height], 'rows': len(actual),
-                             'passed': actual.shape == data['rows'].shape and bool(np.array_equal(actual, data['rows']))})
+            same_shape = actual.shape == data['rows'].shape
+            error = float(np.max(np.abs(actual-data['rows']))) if same_shape and actual.size else 0.0
+            wrappers[entry['case_id']] = {**entry, 'actual_shape': list(actual.shape),
+                                          'reference_shape': list(data['rows'].shape), 'max_abs_error': error,
+                                          'passed': same_shape and error == 0}
     detector_graph = onnx.load(str(root / 'models/face_detection_yunet_2023mar.onnx'))
     metadata['detector_graph_shape'] = [d.dim_value for d in detector_graph.graph.input[0].type.tensor_type.shape.dim]
-    receipt = {'status': 'passed' if all(x['passed'] for x in results.values()) else 'failed',
-               'model_identity': provider.model_identity, 'checker_identity': checker_identity(),
-               'corpus_digest': corpus_digest, 'cases': results, 'metadata': metadata,
+    # The final identity control uses a complete in-memory positive candidate.
+    # No receipt is published until the real control result replaces this placeholder.
+    controls['stale_implementation_digest'] = True
+    receipt = {'schema_version': PARITY_SCHEMA, 'provider': 'auraface',
+               'status': 'passed', 'model_identity': provider.model_identity,
+               'checker_identity': checker_identity(), 'corpus_digest': corpus_digest, 'cases': results,
                'negative_controls': controls, 'negative_controls_passed': all(controls.values()),
-               'detector_wrapper_passed': all(x['passed'] for x in wrappers), 'detector_wrappers': wrappers,
-               'tolerances': {'tensor_atol': 1e-4, 'tensor_rtol': 1e-5, 'cosine_min': .99999},
-               'scope': 'Non-person preprocessing parity and same-engine detector wrapping; not detection or recognition accuracy'}
+               'detector_wrapper_passed': all(x['passed'] for x in wrappers.values()),
+               'detector_wrappers': wrappers, 'tolerances': TOLERANCES,
+               'scope': 'Non-person preprocessing and same-engine detector wrapping, not recognition accuracy'}
+    receipt['status'] = ('passed' if all(x['passed'] for x in results.values())
+                         and receipt['negative_controls_passed'] and receipt['detector_wrapper_passed'] else 'failed')
+    # Identity rejection is meaningful only after the exact positive payload validates.
+    if receipt['status'] == 'passed':
+        validate_payload(receipt, manifest, provider.model_identity, corpus_digest)
+        try:
+            validate_payload(receipt, manifest, '0' * 64, corpus_digest)
+            controls['stale_implementation_digest'] = False
+        except ValueError:
+            controls['stale_implementation_digest'] = True
+    else:
+        controls['stale_implementation_digest'] = False  # Not established under failing prerequisites.
+    receipt['negative_controls_passed'] = all(controls.values())
+    if not receipt['negative_controls_passed']:
+        receipt['status'] = 'failed'
+    Receipt.model_validate(receipt)
+    if receipt['status'] == 'passed':
+        validate_payload(receipt, manifest, provider.model_identity, corpus_digest)
     key = str(provider.parity_path.relative_to(root))
     atomic_write(root, key, json.dumps(receipt, indent=2).encode())
-    try:
-        validate_receipt(root, provider.parity_path, 'stale-implementation-digest')
-        controls['stale_implementation_digest'] = False
-    except ValueError:
-        controls['stale_implementation_digest'] = True
-    receipt['negative_controls_passed'] = all(controls.values())
-    if not receipt['negative_controls_passed'] or not receipt['detector_wrapper_passed']:
-        receipt['status'] = 'failed'
-    atomic_write(root, key, json.dumps(receipt, indent=2).encode())
     atomic_write(root, f'parity/history/{time.time_ns()}.json', json.dumps(receipt, indent=2).encode())
-    print(json.dumps({'status': receipt['status'], 'cases': results, 'negative_controls': controls, 'wrappers': wrappers}))
+    atomic_write(root, 'reference-corpus/runtime-metadata.json', json.dumps(metadata, indent=2).encode())
+    return receipt
+
+
+def main():
+    receipt = run(Settings.environment())
+    print(json.dumps({'status': receipt['status'], 'cases': receipt['cases'],
+                      'negative_controls': receipt['negative_controls'], 'wrappers': receipt['detector_wrappers']}))
     raise SystemExit(0 if receipt['status'] == 'passed' else 1)
 
 

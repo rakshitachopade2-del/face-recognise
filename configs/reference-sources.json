@@ -1,0 +1,35 @@
+{
+  "version": "c0-1-official-sources-v1",
+  "sources": {
+    "face_align.py": {
+      "url": "https://raw.githubusercontent.com/deepinsight/insightface/c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52/python-package/insightface/utils/face_align.py",
+      "revision": "c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52",
+      "sha256": "a8b34ddd06716f5ca7e7501415cbd3789ccbce18db9e557b35e537695290d922",
+      "size_bytes": 3356
+    },
+    "arcface_onnx.py": {
+      "url": "https://raw.githubusercontent.com/deepinsight/insightface/c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52/python-package/insightface/model_zoo/arcface_onnx.py",
+      "revision": "c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52",
+      "sha256": "2df3524243b8e807b0e4756d98bd3f8fd7456feaf6d04da7502a24a54d74e2bc",
+      "size_bytes": 3494
+    },
+    "onnxruntime_utils.py": {
+      "url": "https://raw.githubusercontent.com/deepinsight/insightface/c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52/python-package/insightface/model_zoo/onnxruntime_utils.py",
+      "revision": "c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52",
+      "sha256": "0b5482f03f5f1a37db89569880268b6da090a00263134680f94a8b9eb87bd87f",
+      "size_bytes": 2443
+    },
+    "UPSTREAM-README.md": {
+      "url": "https://raw.githubusercontent.com/deepinsight/insightface/c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52/README.md",
+      "revision": "c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52",
+      "sha256": "1846967d19f2b19845b967e14715c162881e7598360e23ab6646a47c88667758",
+      "size_bytes": 16825
+    },
+    "yunet.py": {
+      "url": "https://raw.githubusercontent.com/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/yunet.py",
+      "revision": "48b10fa505aeb51fbd127fc60a5c660040e823b7",
+      "sha256": "8115b70ce52f514958d9df23fded86729880aec02ee38f0ea18feebce360099a",
+      "size_bytes": 1948
+    }
+  }
+}

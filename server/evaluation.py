@@ -101,6 +101,13 @@ class Evaluation(StrictModel):
                 raise ValueError('asset_mapping_mismatch')
             if any(a.wedding_id != self.event_id or a.split_version != self.split_version for a in self.assets):
                 raise ValueError('asset_event_or_version_mismatch')
+            if self.protocol == 'studio_identity_split_exploratory':
+                source_by_photo = {a.canonical_photo_id: a.person_id for a in gallery}
+                for row in self.labels:
+                    if row.annotation_status == 'source_verified':
+                        expected_person = self.person_mapping.get(source_by_photo[row.canonical_photo_id])
+                        if row.present != (row.person_id == expected_person):
+                            raise ValueError('source_verified_presence_contradicts_gallery_identity')
             references = [a for a in self.assets if a.kind == 'reference']
             if {a.person_id for a in references} != set(self.person_mapping):
                 raise ValueError('reference_roster_mismatch')

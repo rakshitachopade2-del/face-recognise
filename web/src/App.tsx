@@ -3,7 +3,7 @@ import { api, filesForm } from './api';
 import s from './App.module.css';
 
 type Event = {id: string; name: string; expires: number; authorized: number};
-type Person = {id: string; label: string; active: number; enrolled: number};
+type Person = {id: string; label: string; active: number; enrolled: boolean; gallery_ready: boolean; readiness_reason: string | null};
 type Photo = {id: string; state: string; width: number; height: number};
 type Job = {id: string; photo_id: string; kind: string; status: string; attempts: number; error: string | null};
 type Status = {photos: Photo[]; jobs: Job[]; participants: Person[]; imports: {ordinal: number; state: string; reason: string | null}[]};
@@ -122,11 +122,12 @@ export default function App() {
             await api(`${base}/participants/${person}/enrollment`, 'POST', filesForm(input.files)); input.value = ''; setPreview(''); setGallery([]); setNotice('Enrolled. Existing compatible photographs are queued for matching.');
           });}}><label>Participant<select aria-label="Participant" value={person} onChange={e => setPerson(e.target.value)} required><option value="">Select participant</option>{active.map(p => <option key={p.id} value={p.id}>{p.label}{p.enrolled ? ' · enrolled' : ''}</option>)}</select></label><label>Reference images<input name="references" aria-label="Reference images" type="file" accept="image/jpeg,image/png,image/heic,image/heif" multiple required/></label><button className={s.primary} disabled={!person || busy}>Enroll participant</button></form>
           <p className={s.hint}>Test enrollment only. Image selection does not verify identity or prevent spoofing.</p>
+          {person && active.find(p => p.id === person)?.readiness_reason && <p>{active.find(p => p.id === person)?.readiness_reason}</p>}
           {person && <button className={s.danger} disabled={busy} onClick={() => void act(async () => {await api(`${base}/participants/${person}/withdraw`, 'POST'); setPerson(''); setPreview(''); setGallery([]); setNotice('Withdrawn. Enrollment data and gallery links deleted; matching and access disabled.');})}>Withdraw consent & delete enrollment</button>}
         </section>
       </div>}
       {tab === 'Guest preview' && <>
-        <section className={s.card}><h2>Simulate a participant’s gallery</h2><p>Only released full photographs appear here. A group photo may belong to several participants.</p><label>Preview as<select aria-label="Preview as" value={preview} disabled={busy} onChange={e => {const id = e.target.value; setGallery([]); setPreview(''); if (id) void act(async () => {await api(`${base}/participants/${id}/preview`, 'POST'); setPreview(id);});}}><option value="">Select enrolled participant</option>{active.filter(p => p.enrolled).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label></section>
+        <section className={s.card}><h2>Simulate a participant’s gallery</h2><p>Only released full photographs appear here. A group photo may belong to several participants.</p><label>Preview as<select aria-label="Preview as" value={preview} disabled={busy} onChange={e => {const id = e.target.value; setGallery([]); setPreview(''); if (id) void act(async () => {await api(`${base}/participants/${id}/preview`, 'POST'); setPreview(id);});}}><option value="">Select enrolled participant</option>{active.filter(p => p.gallery_ready).map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></label></section>
         {!gallery.length && <div className={s.empty}><span>⌑</span><h2>{preview ? 'No photographs yet.' : 'Choose a participant to preview.'}</h2><p>{preview ? 'Matches will appear as eligible photographs finish processing. An empty gallery is a valid result.' : 'This is a local identity simulator.'}</p></div>}
         <div className={s.gallery}>{gallery.map(p => <article className={s.photo} key={p.id}><img src={`/api${base}/participants/${preview}/gallery/${p.id}/media`} alt="Released photograph"/><button disabled={busy} onClick={() => void act(async () => {await api(`${base}/participants/${preview}/gallery/${p.id}/reject`, 'POST'); setGallery(g => g.filter(x => x.id !== p.id)); setNotice('Removed. This association is suppressed on future retries.');})}>Not me</button></article>)}</div>
       </>}

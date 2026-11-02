@@ -20,12 +20,23 @@ def module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     value = importlib.util.module_from_spec(spec)
     sys.modules[name] = value
-    spec.loader.exec_module(value)
+    # Execute verified source bytes, never a potentially stale __pycache__ entry.
+    exec(compile(path.read_bytes(), str(path), 'exec'), value.__dict__)  # noqa: S102 - verified pinned source, bypass stale bytecode
     return value
 
 
 def run(root):
+    # Verify committed official pins before importing any downloaded reference code.
+    # Kept stdlib-only here so expected preprocessing never imports the app.
+    pins = json.loads((Path(__file__).resolve().parents[1] / 'configs/reference-sources.json').read_text())
+    names = {'face_align.py', 'arcface_onnx.py', 'onnxruntime_utils.py', 'UPSTREAM-README.md', 'yunet.py'}
+    if pins['version'] != 'c0-1-official-sources-v1' or set(pins['sources']) != names:
+        raise ValueError('invalid_reference_pin_inventory')
     sources = root / 'reference-code'
+    for name, pin in pins['sources'].items():
+        path = sources / name
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != pin['sha256'] or path.stat().st_size != pin['size_bytes']:
+            raise ValueError('reference_source_pin_mismatch:' + name)
     for name in ('upstream', 'upstream.utils', 'upstream.model_zoo'):
         package = types.ModuleType(name)
         package.__path__ = []
@@ -77,9 +88,9 @@ def run(root):
         raw = recognizer.get_feat(crop_bgr).reshape(512).astype('float32')
         embedding = (raw / np.linalg.norm(raw)).astype('float32')
         path = corpus / (name + '.npz')
-        np.savez(path, rgb=rgb, landmarks=landmarks, crop=crop_bgr[:, :, ::-1], tensor=capture.tensor,
+        np.savez(path, case_id=np.array(name), rgb=rgb, landmarks=landmarks, crop=crop_bgr[:, :, ::-1], tensor=capture.tensor,
                  raw_embedding=raw, embedding=embedding)
-        cases[name] = {'path': str(path.relative_to(root)), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+        cases[name] = {'case_id': name, 'path': str(path.relative_to(root)), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
     detector_cases = []
     for width, height in ((320, 320), (479, 321), (176, 160)):
         bgr = cv2.resize(pattern[:, :, ::-1], (width, height))
@@ -87,8 +98,8 @@ def run(root):
                                inputSize=[width, height], confThreshold=.8, nmsThreshold=.3, topK=5000)
         rows = detector.infer(bgr)
         path = corpus / f'detector-{width}-{height}.npz'
-        np.savez(path, bgr=bgr, rows=rows)
-        detector_cases.append({'path': str(path.relative_to(root)), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
+        np.savez(path, case_id=np.array(f'{width}x{height}'), bgr=bgr, rows=rows)
+        detector_cases.append({'case_id': f'{width}x{height}', 'path': str(path.relative_to(root)), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
     metadata = {'cases': cases, 'detector_cases': detector_cases, 'normalization':
                 {'mean': recognizer.input_mean, 'std': recognizer.input_std},
                 'inputs': [{'name': v.name, 'shape': v.shape, 'type': v.type} for v in session.get_inputs()],

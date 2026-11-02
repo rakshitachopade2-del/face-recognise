@@ -1,5 +1,17 @@
 # Frame — local face retrieval POC
 
+Current software milestone: **C1 fixed-policy natural group-photo challenge**, including the accepted C0.1 hardening and C1 pair-delivery and gallery-observation corrections. Review branch: [`poc/c1-software-ready`](https://github.com/rakshitachopade2-del/face-recognise/tree/poc/c1-software-ready). See the [publication handoff](docs/C1_PUBLICATION.md) for verification provenance and scope. See [C1_IMPLEMENTATION_REPORT.md](docs/C1_IMPLEMENTATION_REPORT.md) and [C1 input checklist and commands](docs/C1_INPUTS.md). **Real C1 execution is BLOCKED ON DATA**: fresh natural photographs, independent references, documented permission and complete human labels are missing. The supplied FRLL studio portraits are historical evidence, not C1 inputs.
+
+C1 gallery-observation verification: **195 backend tests passed** (77 focused C1 checks), plus Ruff and Python compilation. The previous four browser tests and TypeScript/Vite build are historical checks, not rerun for this backend-only correction. The runner now distinguishes unavailable galleries from successfully read empty galleries. All four A/B/C/D reads must succeed before pair, pilot, design or overall success. Unavailable counts are null, errors are exported, and an incomplete result consumes the attempt without automatic retry. Exact AB/AC/BC requirements, thresholds and all 24/96 rows are unchanged. All 3,879 inventoried historical evidence/artifact files and prior ZIPs were preserved. Real execution remains BLOCKED ON DATA; these software checks do not establish recognition accuracy.
+
+The [C0.1 report](docs/C0_1_HARDENING_REPORT.md) and C0 results below are historical. Keep `var/c0-studio/` and `var/c0-1-hardening/` unchanged. Run the synthetic app in a separate runtime:
+
+```sh
+FACE_DATA_DIR=var/c1-demo FACE_CONFIG=configs/synthetic.json .venv/bin/python -m scripts.dev
+```
+
+Open http://127.0.0.1:5177. The historical C0 commands below are not instructions to execute current code against preserved experiments. Frozen preflight now refuses to rewrite evidence, including through partially completed `all` commands.
+
 Phases A/B plus C0 and the supplied local studio experiment, implemented in this workspace. **Operator-controlled identity simulator: no real authentication, verified camera capture or liveness. Do not expose it publicly.**
 
 The default provider accepts visibly synthetic colored rectangles only. The separate C0 experiment verified the permitted YuNet/AuraFace artifacts, passed independent non-person parity, and completed the supplied studio calibration/probe. Each cohort had 6 correct links, 0 wrong and 0 missed across 12 gallery photos; calibration released no guest links. These small, correlated studio results do not establish real-event accuracy. Shipped real configs remain disabled; SFace, production costs, scale, fairness and liveness remain unmeasured.
@@ -12,10 +24,10 @@ Verification on 1 November 2026: **63 backend tests and 3 Chromium browser tests
 
 Verified on Apple Silicon macOS with Node 24.13.0, npm 11.6.2 and Python 3.12.16. A system Python 3.9+ is sufficient to bootstrap uv; uv installs the pinned Python 3.12 runtime. Internet is needed for open-source dependencies and the optional browser-test download. Default app startup never downloads models. The explicitly invoked study setup downloads only the two permitted pinned artifacts and reference code. HEIC support comes from the pinned pillow-heif wheel; unsupported HEIC variants fail per file. Other operating systems have not been verified.
 
-Clone the C0 review branch and install its locked dependencies. For AI review, start with [AI_REVIEW_HANDOFF.md](docs/AI_REVIEW_HANDOFF.md). Private experiment inputs and runtime evidence are not included in the repository:
+Clone the C1 software review branch and install its locked dependencies. For current AI review, start with [C1_PUBLICATION.md](docs/C1_PUBLICATION.md); [AI_REVIEW_HANDOFF.md](docs/AI_REVIEW_HANDOFF.md) describes the historical C0 milestone. Private experiment inputs and runtime evidence are not included in the repository:
 
 ```sh
-git clone --branch poc/c0-studio-study https://github.com/rakshitachopade2-del/face-recognise.git
+git clone --branch poc/c1-software-ready https://github.com/rakshitachopade2-del/face-recognise.git
 cd face-recognise
 python3 -m venv .bootstrap
 .bootstrap/bin/python -m pip install uv==0.13.6

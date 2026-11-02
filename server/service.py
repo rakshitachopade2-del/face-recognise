@@ -6,7 +6,7 @@ import secrets
 import time
 import uuid
 
-from server.config import digest_json
+from server.config import OperatingPoint, digest_json
 from server.db import Database
 from server.matching import aggregate
 from server.media import MediaError, atomic_write, decode, safe_path
@@ -76,17 +76,19 @@ class Service:
                         now + days * 86400, now, self.config_id, authorization_kind))
         return event_id
 
-    def queue(self, db, event_id, photo_id, kind, revision=0):
+    def queue(self, db, event_id, photo_id, kind, revision=0, *, config_id=None, namespace=None):
+        config_id = config_id or self.config_id
+        namespace = namespace or self.namespace
         if kind == 'match':
             db.execute("""UPDATE jobs SET status='superseded',lease_owner=NULL,error='newer_roster_revision'
                           WHERE event_id=? AND photo_id=? AND kind='match' AND config_id=?
                           AND revision<? AND status IN ('pending','retryable_failure','running')""",
-                       (event_id, photo_id, self.config_id, revision))
-        key = f"{kind}:{photo_id}:{self.namespace}:{self.config_id}:{revision}"
+                       (event_id, photo_id, config_id, revision))
+        key = f"{kind}:{photo_id}:{namespace}:{config_id}:{revision}"
         db.execute("""INSERT OR IGNORE INTO jobs
                    (id,event_id,photo_id,kind,idempotency_key,namespace,config_id,revision,available,created)
                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                   (uid(), event_id, photo_id, kind, key, self.namespace, self.config_id, revision,
+                   (uid(), event_id, photo_id, kind, key, namespace, config_id, revision,
                     time.time(), time.time()))
 
     def import_one(self, event_id, content, batch_id, ordinal):
@@ -211,12 +213,16 @@ class Service:
         revision = db.execute("SELECT revision FROM events WHERE id=?", (event_id,)).fetchone()[0]
         # Existing releases must be reconsidered when the distinct-identity margin changes.
         db.execute("DELETE FROM released_associations WHERE event_id=?", (event_id,))
-        event = db.execute('SELECT authorized,expires FROM events WHERE id=?', (event_id,)).fetchone()
+        event = db.execute('SELECT authorized,expires,active_config FROM events WHERE id=?', (event_id,)).fetchone()
         if not event['authorized'] or event['expires'] <= time.time():
             return
+        # Revocation may arrive through an older Service or cross-event maintenance.
+        # Route to persisted active configuration without loading its model or changing fences.
+        config = db.execute('SELECT namespace FROM configurations WHERE id=?', (event['active_config'],)).fetchone()
         for photo in db.execute("SELECT id FROM photos WHERE event_id=? AND state='complete' AND namespace=?",
-                                (event_id, self.namespace)).fetchall():
-            self.queue(db, event_id, photo["id"], "match", revision)
+                                (event_id, config['namespace'])).fetchall():
+            self.queue(db, event_id, photo["id"], "match", revision,
+                       config_id=event['active_config'], namespace=config['namespace'])
 
     def reject(self, event_id, participant_id, photo_id):
         with self.db.connect(write=True) as db:
@@ -300,6 +306,38 @@ class Service:
                 AND p.namespace=? AND NOT EXISTS (SELECT 1 FROM rejections x WHERE x.event_id=r.event_id
                 AND x.participant_id=r.participant_id AND x.photo_id=r.photo_id) ORDER BY p.created""",
                 (event_id, participant_id, people[0]["generation"], self.config_id, self.namespace))]
+
+    def participant_status(self, db, event_id):
+        event = event_access(db, event_id)
+        config = db.execute('SELECT * FROM configurations WHERE id=?', (event['active_config'],)).fetchone()
+        policy = OperatingPoint.model_validate_json(config['payload'])
+        compatible = {r['participant_id']: r for r in eligible(db, event_id, policy_id=policy.enrollment_policy)
+                      if r['namespace'] == config['namespace']}
+        result = []
+        for row in db.execute('SELECT id,label,active FROM participants WHERE event_id=?', (event_id,)):
+            person = dict(row)
+            enrollment = db.execute('SELECT * FROM enrollments WHERE event_id=? AND participant_id=?',
+                                    (event_id, row['id'])).fetchone()
+            enrolled = row['id'] in compatible
+            if not row['active']:
+                reason = 'Participant withdrawn.'
+            elif not enrollment:
+                reason = 'Enrollment references required.'
+            elif enrollment['policy_id'] != policy.enrollment_policy:
+                reason = 'Re-enrollment required: reference policy changed.'
+            elif enrollment['namespace'] != config['namespace']:
+                reason = 'Re-enrollment required: image representation changed.'
+            elif not enrolled:
+                reason = 'Renew authorization and re-enroll: permission expired or enrollment generation changed.'
+            elif event['active_config'] != self.config_id:
+                reason = 'Use the active event configuration to preview this gallery.'
+            elif not policy.can_release:
+                reason = 'Guest release disabled for this configuration.'
+            else:
+                reason = None
+            result.append({**person, 'enrolled': enrolled, 'gallery_ready': enrolled and reason is None,
+                           'readiness_reason': reason})
+        return result
 
     def retry(self, event_id, job_id):
         with self.db.connect(write=True) as db:

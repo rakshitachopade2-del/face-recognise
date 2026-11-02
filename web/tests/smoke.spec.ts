@@ -5,7 +5,7 @@ const root = path.resolve(import.meta.dirname, '../..');
 let worker: ChildProcess;
 test.beforeAll(() => {
   worker = spawn(path.join(root, '.venv/bin/python'), ['-m', 'server.worker'], {
-    cwd: root, env: {...process.env, FACE_DATA_DIR: path.join(root, 'var/browser-tests')}, stdio: 'ignore'});
+    cwd: root, env: {...process.env, FACE_DATA_DIR: path.resolve(root, process.env.FACE_BROWSER_DATA_DIR || 'var/browser-tests')}, stdio: 'ignore'});
 });
 test.afterAll(() => { worker?.kill('SIGTERM'); });
 
@@ -28,7 +28,7 @@ test('synthetic operator loop: import, enroll, gallery, correction, withdrawal, 
   await page.getByLabel('Photographs', {exact: true}).setInputFiles(path.join(root, 'var/fixtures/gallery-group.png'));
   await page.getByRole('button', {name: 'Import photographs'}).click();
   await expect(page.getByRole('status')).toContainText('0 new, 1 duplicate');
-  await page.screenshot({path: path.join(root, 'var/screenshots/workspace.png'), fullPage: true});
+  await page.screenshot({path: path.join(root, process.env.FACE_BROWSER_RESULTS_DIR || 'var', 'screenshots/workspace.png'), fullPage: true});
   await page.getByRole('button', {name: '02 Enrollment'}).click();
   await page.getByLabel('Participant label').fill('Synthetic red');
   await page.getByLabel('Active consent record').fill('Synthetic consent record');
@@ -43,7 +43,7 @@ test('synthetic operator loop: import, enroll, gallery, correction, withdrawal, 
   await expect(page.getByAltText('Released photograph')).toHaveCount(1, {timeout: 20000});
   await expect(page.getByAltText('Released photograph')).toBeVisible();
   expect(await page.getByAltText('Released photograph').evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
-  await page.screenshot({path: path.join(root, 'var/screenshots/gallery.png'), fullPage: true});
+  await page.screenshot({path: path.join(root, process.env.FACE_BROWSER_RESULTS_DIR || 'var', 'screenshots/gallery.png'), fullPage: true});
   await page.getByRole('button', {name: 'Not me', exact: true}).click();
   await expect(page.getByRole('heading', {name: 'No photographs yet.'})).toBeVisible();
   await page.getByRole('button', {name: '02 Enrollment'}).click();
@@ -64,5 +64,5 @@ test('mobile shell has no horizontal overflow', async ({page}) => {
   await page.goto('/');
   await expect(page.getByRole('heading', {name: 'Every photo, in its place.'})).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
-  await page.screenshot({path: path.join(root, 'var/screenshots/mobile.png'), fullPage: true});
+  await page.screenshot({path: path.join(root, process.env.FACE_BROWSER_RESULTS_DIR || 'var', 'screenshots/mobile.png'), fullPage: true});
 });

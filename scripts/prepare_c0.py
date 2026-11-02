@@ -6,8 +6,7 @@ import urllib.request
 from pathlib import Path
 
 from server.media import atomic_write
-
-REFERENCE_REV = "c6c3af7bd2d0a0bf4b78c78437357f3521aa5d52"
+from server.reference_pins import source_pins, verify_sources
 
 
 def download(url, target, expected=None, size=None):
@@ -17,6 +16,9 @@ def download(url, target, expected=None, size=None):
         with urllib.request.urlopen(url, timeout=120) as response, temporary.open('wb') as output:
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)
+        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
+        if (expected and digest != expected) or (size and temporary.stat().st_size != size):
+            raise ValueError('download_hash_or_size_mismatch:' + target.name)
         temporary.replace(target)
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     if expected and digest != expected or size and target.stat().st_size != size:
@@ -25,6 +27,8 @@ def download(url, target, expected=None, size=None):
 
 
 def prepare(kit, root):
+    if (root / 'freeze.json').exists():
+        raise ValueError('historical_freeze_present_use_separate_preparation_directory')
     pins = json.loads((kit / 'docs/prior-review/03-Model-Pins.json').read_text())
     registry = json.loads(Path('configs/models.json').read_text())
     evidence = {'models': {}, 'reference_sources': {}, 'project_authorization':
@@ -41,17 +45,10 @@ def prepare(kit, root):
                              weights_terms=model['license_url'])
     registry['yunet']['contract'].update(input_shape=[1, 3, 640, 640],
                                         runtime_shape='OpenCV 4.x variable input; verified separately')
-    paths = {'face_align.py': 'python-package/insightface/utils/face_align.py',
-             'arcface_onnx.py': 'python-package/insightface/model_zoo/arcface_onnx.py',
-             'onnxruntime_utils.py': 'python-package/insightface/model_zoo/onnxruntime_utils.py',
-             'UPSTREAM-README.md': 'README.md'}
-    for filename, upstream in paths.items():
-        url = f'https://raw.githubusercontent.com/deepinsight/insightface/{REFERENCE_REV}/{upstream}'
-        evidence['reference_sources'][filename] = download(url, root / 'reference-code' / filename)
-    rev = pins['models'][0]['revision']
-    evidence['reference_sources']['yunet.py'] = download(
-        f'https://raw.githubusercontent.com/opencv/opencv_zoo/{rev}/models/face_detection_yunet/yunet.py',
-        root / 'reference-code/yunet.py')
+    for filename, pin in source_pins().items():
+        evidence['reference_sources'][filename] = download(
+            pin['url'], root / 'reference-code' / filename, pin['sha256'], pin['size_bytes'])
+    verify_sources(root)
     for name, payload in (('registry.json', registry), ('artifact-evidence.json', evidence)):
         atomic_write(root, name, json.dumps(payload, indent=2).encode())
     return evidence

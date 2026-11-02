@@ -1,5 +1,7 @@
 # Model boundary and verified local artifacts
 
+C0.1 adds a new `independent-nonperson-v3` evidence contract. [C0_1_HARDENING_REPORT.md](C0_1_HARDENING_REPORT.md) records fresh non-person parity in separate storage. Historical C0 receipts are preserved, rejected for the changed code, and never upgraded in place. No C0.1 portrait experiment was performed.
+
 C0 executed **YuNet + AuraFace** on 1 November 2026. These adapters are implemented and now have independent non-person preprocessing evidence and the bounded studio experiment described in [STUDIO_STUDY_REPORT.md](STUDIO_STUDY_REPORT.md). The checked-in registry remains disabled; only the ignored study registry enables the exact user-authorized artifacts. Production clearance remains unresolved. No SFace weights, auxiliary models, demographic models or model bundles were downloaded.
 
 | Artifact | Pinned revision | Actual bytes | SHA-256 |
@@ -25,17 +27,23 @@ Representation identity includes inference/preparation code hashes, artifact has
 
 ## Commands
 
-From the repository root, with the supplied kit in ignored storage:
+For a new numerical parity directory, from the repository root with the supplied kit in ignored storage (no portrait inference):
 
 ```sh
 .bootstrap/bin/uv sync --locked --group reference
-.venv/bin/python -m scripts.prepare_c0
-FACE_DATA_DIR=var/c0-studio FACE_MODELS=var/c0-studio/registry.json \
+.venv/bin/python -m scripts.prepare_c0 --root var/c0-1-fresh-parity
+FACE_DATA_DIR=var/c0-1-fresh-parity FACE_MODELS=var/c0-1-fresh-parity/registry.json \
   FACE_CONFIG=configs/auraface.uncalibrated.json .venv/bin/python -m scripts.check_parity
-.venv/bin/python -m scripts.studio_study preflight
-.venv/bin/python -m scripts.studio_study all
 ```
 
 `all` prepares artifacts and parity for a new run, then calibrates, freezes, probes once and records controls. A completed run returns saved results without repeating probe inference. Preserve its runtime directory; do not regenerate or edit frozen evidence to make a later run appear identical. An interrupted stage remains marked and is not silently replayed. New code or new experiments need separate run storage and an honestly declared new exploratory protocol.
 
 Real shipped configs have `release_enabled=false`. Raw diagnostics can run with no guest releases. Only an explicitly enabled provisional/validated policy with a freeze identity permits release; the studio runner verifies the full frozen manifest before the probe. Default startup remains synthetic. SFace has shared adapter code, but its graph-specific contract and parity are unverified and its model remains disabled; comparison is out of scope.
+
+## C0.1 evidence validation
+
+`configs/reference-sources.json` commits the exact five original source URLs, revisions, sizes and SHA-256 pins. Preparation verifies both cached and downloaded bytes; a mismatch is refused without replacing a cached source. The isolated runner checks every pin before importing reference code and compiles the verified source bytes rather than trusting cached bytecode.
+
+Shared strict schemas require exactly eight named preprocessing cases, seven negative controls, three declared wrapper sizes and all five pinned sources. Each archive has a bound case ID, path and hash. Numeric metrics must be finite; Boolean fields cannot be strings or integers. Fixed-tolerance case decisions and aggregate summaries must agree with complete measurements; a summary flag alone cannot enable a provider. Case norm/shape/dtype checks also run at startup. A final receipt is atomically written only after the stale-identity control completes. Pin-manifest, schema, generator/checker and reference-runtime changes invalidate prior evidence.
+
+This remains a local correctness/reproducibility gate, not signed tamper-proof attestation. The suite is AuraFace-specific and does not establish SFace parity. Preparation and parity commands refuse a directory containing a historical freeze. Never use the old C0 runtime as new-run storage.
